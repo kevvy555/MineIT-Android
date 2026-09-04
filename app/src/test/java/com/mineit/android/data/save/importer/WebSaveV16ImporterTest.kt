@@ -28,6 +28,11 @@ class WebSaveV16ImporterTest {
         assertEquals(987_654L, preview.companyCash)
         assertEquals(24, preview.companyReputation)
         assertEquals(2, preview.colonyCount)
+        assertEquals("temperate", preview.contractArchetypeId)
+        assertEquals(2, preview.tileCount)
+        assertEquals(2, preview.revealedTileCount)
+        assertEquals(1, preview.activeSurveyCount)
+        assertEquals(1, preview.surveyQueueCount)
 
         val fungal = preview.activeInventory.find(ResourceId("fungal"))!!
         assertEquals(425.0, fungal.amount, 0.0001)
@@ -47,7 +52,11 @@ class WebSaveV16ImporterTest {
                 "pop":1,
                 "company":{"cash":1},
                 "portfolio":{"activeColonyId":"one","colonies":[{"id":"one","name":"One"}]},
-                "inventory":{}
+                "inventory":{},
+                "contract":{"arch":"temperate"},
+                "tiles":{},
+                "scans":[],
+                "scanQueue":[]
             }""",
         )
     }
