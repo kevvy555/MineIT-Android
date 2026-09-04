@@ -91,6 +91,7 @@ fun MineItScreen(
     onSetPrimaryHeadquarters: () -> Unit,
     onAdvanceDay: () -> Unit,
     onSetSimulationSpeed: (Int) -> Unit,
+    onOpenCommercial: () -> Unit,
     onMainMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -134,6 +135,14 @@ fun MineItScreen(
                     onMainMenu = onMainMenu,
                 )
             } else {
+                MineItSecondaryButton(
+                    text = if (colony.trade.active) "COMMERCIAL • TRADE SHIP DOCKED" else "COMMERCIAL • TRADE / CONTRACTS / BUYERS / LOG",
+                    onClick = onOpenCommercial,
+                    modifier = Modifier.fillMaxWidth(),
+                    selected = colony.trade.active,
+                    accent = if (colony.trade.active) MineItPalette.Success else MineItPalette.Accent,
+                )
+
                 MapToolbar(
                     focus = mapFocus,
                     filters = mapFilters,
