@@ -1,6 +1,6 @@
 # MineIT Web-to-Native Android Migration Guide
 
-**Status:** Living migration plan  
+**Status:** Living migration plan — Phase 0 active  
 **Source application:** `kevvy555/MineIT` (`develop`)  
 **Source baseline:** commit `9e58983adaa7a15cd525451266ce9df3c17ae886`  
 **Source game version:** `5.13.15`  
@@ -9,141 +9,143 @@
 **Initial native proof of concept:** `0.1.3-poc` / version code `4`  
 **Canonical shared universe:** `kevvy555/MineIT-Universe`
 
----
-
 ## 1. Purpose
 
-This document is the authoritative guide for migrating MineIT from its current vanilla HTML/CSS/modular-JavaScript implementation to a fully native Android application built with Kotlin and Jetpack Compose.
+This document is the authoritative guide for migrating MineIT from vanilla HTML/CSS/modular JavaScript to a fully native Android application built with Kotlin and Jetpack Compose.
 
-The migration is not intended to be a mechanical line-for-line translation. The existing web implementation remains the behavioural reference while each system is moved, but the migration is also an opportunity to remove browser-specific architecture, tighten state ownership, improve persistence, make simulation behaviour more deterministic and testable, and establish a clean native foundation that can support the full future MineIT roadmap.
+The migration is **not** a line-for-line rewrite. The current web implementation remains the behavioural reference while systems are moved, but the rewrite is also a one-time opportunity to establish cleaner long-term architecture.
 
-The target is a native, offline-first Android game with no WebView and no mandatory server dependency.
+The governing rule is:
 
-The migration must preserve the key architectural improvements already achieved in the web repository: one canonical implementation per responsibility, domain-owned gameplay rules, explicit state ownership, directional dependencies, bounded lifecycle ownership, mobile-first interaction and strong regression coverage.
+> **Preserve gameplay by default. Improve architecture where the improvement does not materially change gameplay.**
 
----
+Clear defects may be corrected with regression coverage. Material balancing, progression or economy redesigns remain separate approved work.
 
-## 2. Migration goals
+The target is a native, offline-first Android game with no WebView and no mandatory backend/server dependency.
+
+## 2. Supporting migration decisions
+
+Detailed decisions that form part of this plan live in:
+
+- [`migration/PHASE_0_BASELINE.md`](./migration/PHASE_0_BASELINE.md) — exact source baseline, source-owner inventory, screen/flow inventory and parity-fixture contract;
+- [`migration/INTENTIONAL_DIVERGENCES.md`](./migration/INTENTIONAL_DIVERGENCES.md) — required log for deliberate semantic differences;
+- [`migration/RESOURCE_ARCHITECTURE_DIRECTION.md`](./migration/RESOURCE_ARCHITECTURE_DIRECTION.md) — resource architecture improvements allowed during migration without implementing the resource overhaul;
+- [`migration/DESIGN_SYSTEM_DIRECTION.md`](./migration/DESIGN_SYSTEM_DIRECTION.md) — MineIT-wide visual/interaction consistency workstream;
+- [`migration/UNIVERSE_BUNDLING_DIRECTION.md`](./migration/UNIVERSE_BUNDLING_DIRECTION.md) — build-time MineIT-Universe pinning, validation and offline bundling.
+
+These are part of the migration contract, not optional notes.
+
+## 3. Migration goals
 
 The migration is successful when:
 
-1. MineIT runs as a fully native Android app using Kotlin and Jetpack Compose.
-2. Existing gameplay behaviour is preserved unless an intentional bug fix or approved design change is recorded.
-3. The native app has one authoritative game-state owner and UI never becomes the source of gameplay truth.
-4. The day simulation can run and be tested independently of Android UI APIs.
-5. Save data is versioned, recoverable and migration-tested.
-6. Existing web saves can be imported where practical.
-7. MineIT-Universe remains the canonical source for shared lore/data/art.
-8. The game remains fully playable offline after installation.
-9. HTML/CSS mocks can continue to be used as rapid visual prototypes, while production UI is implemented in Compose.
-10. Android CI proves domain tests, save migration, build validity and signing consistency on every relevant change.
-11. The old web game can remain available as a reference until native parity is accepted.
-12. Once native parity is accepted, no permanent duplicate game engines are maintained.
+1. MineIT runs fully natively with Kotlin and Jetpack Compose.
+2. Existing gameplay behaviour is preserved unless a difference is deliberately approved/recorded.
+3. One authoritative native state owner controls gameplay state.
+4. UI renders state and dispatches intent; it never owns gameplay truth.
+5. Simulation is independent of rendering/frame rate and can be run deterministically in JVM tests.
+6. Save data is versioned, atomic, recoverable and migration-tested.
+7. Existing web saves can be imported where practical.
+8. MineIT-Universe remains canonical and required data/art is bundled into builds for offline play.
+9. The migration produces a consistent MineIT design language across features without replacing the successful core UX concepts.
+10. HTML/CSS mocks remain available as rapid visual prototypes; approved production UI is Compose.
+11. Android CI proves domain/parity tests, save migration, build validity and signing consistency.
+12. The web game remains available as the behaviour reference until native parity is accepted.
+13. After cutover, no permanent duplicate game engines are maintained unless a separate supported web edition is deliberately chosen.
 
----
-
-## 3. Explicit non-goals
+## 4. Explicit non-goals
 
 The migration must not become an uncontrolled redesign.
 
-The following are not automatic parts of the migration:
+Do **not** automatically:
 
-- redesigning every gameplay rule simply because the code is being moved;
-- preserving known bugs for the sake of exact implementation parity;
-- adding speculative frameworks or abstractions with no current requirement;
-- recreating browser concepts such as DOM templates, CSS inheritance or `requestAnimationFrame` when Android has a cleaner native equivalent;
-- introducing a mandatory backend or online login;
-- keeping a WebView as a permanent compatibility layer;
-- splitting the Android project into many Gradle modules before the codebase is large enough to justify them;
-- copying temporary POC models into the production architecture.
+- redesign gameplay simply because code is moving;
+- perform the full resource-economy overhaul;
+- define the future refined/manufactured resource catalogue;
+- rebalance prices, yields, Fuel, nutrition or progression;
+- preserve known bugs merely for parity;
+- recreate browser concepts where Android has a cleaner equivalent;
+- introduce a mandatory backend/login;
+- keep a WebView as a compatibility architecture;
+- split into many Gradle modules without measurable benefit;
+- preserve POC/demo models as production contracts;
+- create speculative frameworks or future systems that current migration work does not require.
 
-Gameplay changes discovered during migration still follow the MineIT discovery/backlog process unless they are clear defect corrections.
+Gameplay/design changes discovered during migration follow the MineIT backlog/discovery process unless the user explicitly approves them or they are clear defect corrections.
 
----
+## 5. Source architecture being migrated
 
-## 4. Source architecture being migrated
+The web application already has valuable separation and completed significant cleanup work. Preserve the successful ownership model rather than reverting to monolithic native code.
 
-The current web application already has useful separation that should guide the native architecture.
+### 5.1 Current web ownership
 
-### 4.1 Current ownership
-
-The web repository uses these primary areas:
-
-- `js/core/` — infrastructure and utilities;
+- `js/core/` — infrastructure/utilities and `GameStore`;
 - `js/data/` — static definitions/configuration;
-- `js/domain/` — gameplay rules, services and state behaviour;
-- `js/persistence/` — save and development-task repositories;
-- `js/ui/` — UI controllers/presentation;
+- `js/domain/` — authoritative gameplay services and state behaviour;
+- `js/persistence/` — save/development-task persistence;
+- `js/ui/` — presentation/controllers;
 - `views/` — external HTML fragments/templates;
 - `css/` — presentation styling;
 - `tests/` — architecture, unit, regression, simulation and browser probes.
 
-`GameStore` is currently the mutable root state owner. Domain services own gameplay rules. UI controllers render state and invoke domain behaviour.
+`GameStore` owns the mutable root state. Domain services own gameplay decisions. UI renders and dispatches.
 
-That ownership model is sound and should be retained conceptually, while the mutable JavaScript implementation is replaced with safer Kotlin state boundaries.
+### 5.2 `app.js` is a migration opportunity
 
-### 4.2 Current composition root
+`js/app.js` currently combines:
 
-`js/app.js` currently performs several responsibilities at once:
+- dependency construction;
+- state creation/normalisation;
+- simulation scheduling;
+- cross-colony orchestration;
+- corporate-event sequencing;
+- lifecycle saving;
+- UI coordination;
+- error handling;
+- the browser animation loop.
 
-- constructs all domain services;
-- constructs persistence;
-- creates/normalises state;
-- constructs the UI and map runtime;
-- coordinates colony switching and corporate events;
-- schedules simulation days;
-- saves state;
-- runs global error handling;
-- runs the `requestAnimationFrame` application loop;
-- triggers broad UI rendering.
+Native code must not reproduce this as one giant manager/activity/application class.
 
-This is one of the main opportunities for improvement. Native Android should not create a new giant `MineITApp.kt` that reproduces all of those responsibilities.
+### 5.3 Current persistence
 
-### 4.3 Current persistence
+Web saves are a single JSON root object in `localStorage`, currently schema version `16`.
 
-The web `SaveRepository` stores the complete game state as JSON in `localStorage`.
+Strengths to preserve:
 
-Current strengths:
+- plain inspectable JSON;
+- realistic round-trip tests;
+- explicit state versioning;
+- mature migration/normalisation knowledge.
 
-- the save format is plain JSON;
-- realistic round-trip tests already exist;
-- state normalisation/migration already has an explicit state version;
-- current runtime state is version `16`.
+Native improvements:
 
-Current limitations to improve natively:
+- atomic file writes;
+- previous-known-good backup;
+- explicit ordered migrations;
+- validation/recovery diagnostics;
+- better durable/derived/transient-state separation.
 
-- `localStorage` provides no atomic file replacement;
-- there is no automatic previous-save backup;
-- corruption recovery is limited;
-- save-schema migrations are increasingly concentrated in large normalisation functions;
-- durable gameplay state and some session/UI concerns are mixed in the same root object.
+### 5.4 Current simulation
 
-### 4.4 Current simulation
+`simulation-engine.js` is a useful canonical gameplay boundary for production, Power, Fuel, Industry, workforce, Food, mortality, depletion, accidents, engineering and related day effects.
 
-The web simulation engine already provides a useful canonical gameplay boundary. It handles production, workforce, Power, Fuel, Industry, Food, deaths, site depletion, accidents, engineering, ships and related daily effects.
+The browser schedules days using `requestAnimationFrame`; native must separate scheduling from gameplay execution.
 
-However, scheduling of simulation days is tied to the browser animation loop. The native version should make rendering and simulation timing independent.
+### 5.5 Current Universe integration
 
-### 4.5 Current Universe integration
+The web ship catalogue is runtime remote-first with a bundled fallback. Android changes that model: a pinned validated Universe snapshot becomes install-time content so core play does not require the network.
 
-The current ship catalogue reads canonical MineIT-Universe data remotely from GitHub Pages and falls back to a bundled snapshot.
+## 6. Target Android architecture
 
-For Android the preferred model is different: the app must be independently playable offline, so a pinned Universe snapshot should be bundled into the application. Optional refresh behaviour can be added later, but the game must never require the network to load core canonical data.
-
----
-
-## 5. Target Android architecture
-
-The POC has already proved a small `domain` / `ui` separation. The production migration should extend that model without prematurely introducing many Gradle modules.
-
-Initial target layout:
+Keep a single Gradle app module initially, but use clear package boundaries:
 
 ```text
 app/src/main/java/com/mineit/android/
 ├── app/
 │   ├── GameSession.kt
 │   ├── SimulationClock.kt
-│   └── AppComposition.kt
+│   ├── AppComposition.kt
+│   └── coordinators/
 ├── domain/
 │   ├── model/
 │   ├── config/
@@ -177,118 +179,117 @@ app/src/main/java/com/mineit/android/
     └── common/
 ```
 
-This is package separation inside the existing app module. Additional Gradle modules should only be introduced when build time, ownership or reuse provides a measurable reason.
+Additional Gradle modules are introduced only when build time, ownership or reuse creates a measurable reason.
 
-### 5.1 Dependency direction
-
-The intended direction is:
+### 6.1 Dependency direction
 
 ```text
 Compose UI
     ↓
-ViewModel / UI state holder
+feature ViewModel / UI state
     ↓
-Application/session actions
+application/session actions
     ↓
-Domain services / simulation
+domain services / simulation
     ↓
-Domain models
+domain models
 
-Data adapters → domain contracts
-Android platform APIs remain outside pure domain code.
+Data adapters implement domain/application contracts.
+Android platform APIs stay outside pure domain code.
 ```
 
-The domain layer must not depend on Compose, Android `Context`, Activity, lifecycle classes, filesystem APIs or network clients.
+The domain layer must not depend on Compose, Activity, `Context`, lifecycle APIs, filesystem APIs or network clients.
 
----
+## 7. Game-state ownership
 
-## 6. Game-state ownership
+### 7.1 `GameSession`
 
-### 6.1 Native equivalent of GameStore
-
-The web `GameStore` concept is worth preserving, but the Android implementation should expose immutable state.
-
-Recommended owner:
+The native equivalent of the useful `GameStore` concept is an application-layer owner:
 
 ```text
 GameSession
-    owns StateFlow<GameState>
-    serialises gameplay commands
-    invokes domain services
-    saves committed state
+  owns StateFlow<GameState>
+  serialises gameplay commands
+  invokes domain behaviour
+  commits authoritative next state
+  coordinates persistence after committed changes
 ```
 
-Compose observes `StateFlow<GameState>` through ViewModels. UI never mutates state directly.
+Compose observes state through ViewModels. UI never mutates root state directly.
 
-### 6.2 Immutable at boundaries
+### 7.2 Immutable boundaries
 
-The preferred rule is:
+- state exposed to UI is immutable;
+- domain operations return explicit results/next state;
+- controlled internal mutation may be used later for measured simulation performance, but never leaks as public mutable state.
 
-- `GameState` exposed to UI is immutable;
-- domain operations return explicit results and the next authoritative state;
-- if controlled internal mutation is later needed for simulation performance, it remains private to a domain transaction and never leaks to UI.
+### 7.3 Durable vs derived vs transient
 
-Do not reproduce widespread public field mutation simply because JavaScript currently allows it.
-
-### 6.3 Derived state
-
-During migration, audit fields currently stored under `metrics` and other runtime objects.
-
-For each field decide whether it is:
+Every current persisted field should be classified as:
 
 1. durable gameplay truth;
-2. historical state required for future simulation;
-3. a derived calculation that can be recomputed;
-4. transient UI/session state.
+2. historical state needed by future simulation;
+3. derived/recomputable state;
+4. transient session/UI state.
 
-Derived values should generally not be persisted unless keeping them is required for exact behaviour or performance.
+Do not blindly persist derived network summaries forever. Do not remove imported fields until migration tests prove behaviour remains correct.
 
-Examples that require explicit review include Power network summaries, current production forecasts, selected camera position and game speed.
+### 7.4 Strong types where they prevent real bugs
 
-Do not remove fields from imported web saves until a migration test proves the new representation preserves behaviour.
+Use typed IDs/value objects selectively for important concepts such as:
 
----
+- `ColonyId`;
+- `ShipId`;
+- `ResourceId`;
+- `AbsoluteDay` / `GameDate`;
+- quality/ranged factors where validation matters;
+- money/quantities where mixing units is a realistic defect risk.
 
-## 7. Time and simulation architecture
+Do not wrap every primitive for architectural appearance.
 
-The web application currently drives game days from `requestAnimationFrame`, accumulating elapsed time according to `state.speed`.
+Prefer enums/sealed types for finite state machines such as ship state, colony state and corporate-event kinds where this makes invalid states harder to express.
 
-Native Android should separate these concerns.
+## 8. Deterministic simulation and time
 
-### 7.1 SimulationClock
+### 8.1 `SimulationClock`
 
-Create an application-layer `SimulationClock` backed by coroutines.
+Use an application-layer coroutine-backed clock that:
 
-Responsibilities:
+- maps game speed to day cadence;
+- pauses at speed zero;
+- pauses for blocking events where required;
+- asks `GameSession` to advance a day;
+- owns no gameplay rules;
+- is lifecycle-aware without making gameplay correctness depend on lifecycle/render frames.
 
-- map selected game speed to a day cadence;
-- pause when speed is zero;
-- pause for blocking corporate events where required;
-- dispatch `advanceDay` to `GameSession`;
-- never own gameplay rules;
-- respect lifecycle without binding simulation correctness to frame rendering.
+### 8.2 Rendering never drives gameplay
 
-### 7.2 Rendering must not drive simulation
+Compose recomposition, screen refresh rate and animation must have no effect on simulation results.
 
-Compose recomposition, device refresh rate and animation frames must have no influence over game results.
+A domain `advanceDay` operation must yield the same result when invoked by:
 
-`SimulationEngine.advanceDay(state)` should produce the same result whether invoked by a timer, a unit test, a debug command or a soak test.
+- the clock;
+- a unit test;
+- a debug command;
+- a long-running soak test.
 
-### 7.3 Determinism
+### 8.3 Reproducible randomness
 
-Where gameplay uses randomness, introduce a domain-owned random source with persisted seed/state so tests can reproduce outcomes.
+Replace hidden/global randomness with a domain-owned random source whose seed/state is persisted where needed.
 
-The current web state creation already uses generated seeds. During each ported feature, identify any direct random calls outside the authoritative seeded path. Replace those with an injected/persisted random source instead of carrying hidden nondeterminism into Kotlin.
+Goal:
 
----
+```text
+save + random state + actions = reproducible outcome
+```
 
-## 8. Persistence and save migration
+This is important both for parity migration and future bug reports.
 
-Persistence is an early migration priority because every later vertical slice benefits from a stable save contract.
+## 9. Persistence and web-save migration
 
-### 8.1 Native save format
+### 9.1 Native save envelope
 
-Use `kotlinx.serialization` for the root save model.
+Use `kotlinx.serialization` for production save models.
 
 Recommended envelope:
 
@@ -297,808 +298,668 @@ SaveEnvelope
 - formatVersion
 - gameVersion
 - universeContentVersion
+- universeSourceCommit
 - savedAt
 - state
 ```
 
-The root game state may remain a JSON document initially. MineIT is naturally an aggregate simulation state, so Room should not be introduced merely because it is an Android database option.
+The aggregate game state may remain JSON/file-based. Do not add Room merely because it is an Android database option. Introduce a database later only for a demonstrated independently queried data need.
 
-Use Room later only if a real need emerges for independently queried large datasets such as extensive telemetry/history.
+### 9.2 Storage
 
-### 8.2 Storage mechanism
+Production `SaveRepository` should:
 
-Recommended production save repository:
-
-- app-private file storage;
-- write new save to a temporary file;
-- flush/close;
-- atomically replace the active save where supported;
+- store in app-private storage;
+- write to a temporary file first;
+- flush/close before promotion;
+- atomically replace active save where supported;
 - retain one previous known-good backup;
-- validate before promoting a loaded save;
-- surface meaningful recovery diagnostics.
+- validate before accepting a loaded save;
+- provide actionable recovery diagnostics.
 
-Use DataStore for small preferences such as UI options, not the complete game state.
+Use DataStore or equivalent only for small preferences, not the complete game state.
 
-### 8.3 Web save compatibility
+### 9.3 Web v16 import
 
-Current web save state is JSON version `16`.
-
-Create a dedicated `WebSaveV16Importer` rather than contaminating normal native domain models with JavaScript compatibility fields.
-
-Suggested flow:
+Keep JavaScript compatibility out of canonical native models:
 
 ```text
 Web JSON
   ↓
-WebSaveV16 DTO
+WebSaveV16 DTO/import representation
   ↓
-validated import
+validation
   ↓
-explicit migration/adaptation
+explicit adapter/migration
   ↓
-current Android GameState
+current native GameState
   ↓
-normal Android SaveEnvelope
+normal native SaveEnvelope
 ```
 
-If existing player saves must move from the browser version, add an export-to-file feature to the web game and an import action to Android. Direct access to browser `localStorage` should not be assumed.
+If player continuity requires it, add explicit web export-to-file and Android import. Do not assume Android can access browser `localStorage` directly.
 
-### 8.4 Migration chain
+### 9.4 Explicit migration chain
 
-Avoid one permanently growing `normalizeState()` function.
+Avoid recreating one indefinitely growing `normalizeState()`.
 
-Use explicit ordered migrations, for example:
+Prefer ordered migrations such as:
 
 ```text
-v16 web import → native v1
+web v16 → native v1
 native v1 → native v2
 native v2 → native v3
 ```
 
-Each migration must have fixture tests.
+Every migration receives fixture coverage.
 
----
+## 10. MineIT-Universe build-time bundling
 
-## 9. MineIT-Universe integration
+The authoritative detail is in [`migration/UNIVERSE_BUNDLING_DIRECTION.md`](./migration/UNIVERSE_BUNDLING_DIRECTION.md).
 
-`MineIT-Universe` remains canonical. The Android repository stores only the versioned snapshot/cache needed to build and run the game.
-
-Recommended flow:
+Core rule:
 
 ```text
-MineIT-Universe canonical JSON/art
-        ↓
-explicit sync tool / CI validation
-        ↓
-pinned content version + source commit
-        ↓
-Android bundled assets
-        ↓
-UniverseRepository
-        ↓
-domain read-only definitions
+MineIT-Universe
+   ↓ pinned commit/content version
+sync + validation
+   ↓
+Android bundled JSON/art
+   ↓
+APK/AAB install-time content
+   ↓
+read-only UniverseRepository
 ```
 
-Requirements:
+Required canonical data and required gameplay artwork must be locally available after installation.
 
-- core gameplay must work without internet;
-- bundled data provenance must include Universe content version/source commit;
-- malformed or incompatible Universe data must fail validation during development/CI;
-- runtime gameplay state must not mutate canonical Universe definitions;
-- images should continue to use canonical `image.key` identifiers where practical;
-- optional remote catalogue refresh can be considered later, but bundled data remains sufficient to play.
+CI/build validation should detect the MineIT-relevant classes of invalid snapshot: unsupported schema, malformed data, duplicate IDs, missing references and missing required `image.key` assets.
 
-The existing web ship catalogue fallback model can inform this design, but Android should prefer build-time pinning over a runtime remote-first dependency.
+The Android repository stores a generated/pinned snapshot, not a second manually edited canonical Universe.
 
----
+If artwork later becomes too large for straightforward packaging, prefer install-time asset delivery that retains offline play rather than network-only core art.
 
-## 10. HTML/CSS to Compose migration workflow
+## 11. Resource architecture during migration
 
-HTML/CSS remains useful during migration as a rapid design tool.
+The authoritative boundary is in [`migration/RESOURCE_ARCHITECTURE_DIRECTION.md`](./migration/RESOURCE_ARCHITECTURE_DIRECTION.md), informed by the September 2026 resource-economy discovery.
 
-Recommended workflow:
+### 11.1 Decision
+
+**Improve the resource architecture now; defer the resource overhaul itself.**
+
+The migration may make structural improvements that preserve current behaviour, but it must not define/rebalance the future resource economy as part of parity work.
+
+### 11.2 Permanent model direction
+
+The native model should naturally support:
+
+- stable `ResourceId` identity independent of display names;
+- generic resource quantity and quality/quality-band storage;
+- resource definitions/metadata;
+- current Food/Build/Fuel/Ore categories without making those four categories the permanent limits of the architecture;
+- one authoritative resource/extractor compatibility source;
+- explicit compatibility queries rather than inferring every rule from a broad category;
+- future raw/refined/manufactured classifications;
+- future recipes/processing without building them now;
+- future generator/ship-fuel compatibility without changing it now;
+- data-driven presentation metadata.
+
+### 11.3 What remains deferred
+
+Do not implement during migration unless separately approved:
+
+- final resource renames/merges/removals;
+- new planetary distribution;
+- new extraction buildings/rules;
+- refined-material catalogue;
+- manufacturing product catalogue;
+- production-order/recipe gameplay;
+- generator fuel redesign;
+- Propellant/Fusion Fuel redesign;
+- nutrition/energy/quality rebalance;
+- buyer-market redesign for processed goods;
+- economy/progression rebalance.
+
+Current behaviour remains the parity reference even where the later discovery intends to replace it.
+
+## 12. MineIT design consistency workstream
+
+The authoritative detail is in [`migration/DESIGN_SYSTEM_DIRECTION.md`](./migration/DESIGN_SYSTEM_DIRECTION.md).
+
+The migration is a deliberate opportunity to make the game feel designed as one product rather than a set of independently evolved screens.
+
+### 12.1 Principle
+
+> **Preserve successful MineIT UX concepts; standardise the language used to express them.**
+
+The map-first structure, compact operational presentation and existing MineIT identity remain. We are not redesigning every screen from scratch.
+
+### 12.2 HTML/CSS mocks remain part of the workflow
 
 ```text
-Feature idea
-  ↓
-HTML/CSS visual mock when useful
-  ↓
-user approves visual direction
-  ↓
-Compose implementation using MineIT design components
-  ↓
-Compose preview/screenshot test
-  ↓
-APK hands-on check when required
+idea
+ → HTML/CSS visual mock when useful
+ → visual approval
+ → Compose using MineIT design primitives
+ → Preview/screenshot test
+ → APK hands-on check where valuable
 ```
 
-The HTML mock is a visual specification, not production code.
+HTML is a visual specification, never a WebView production implementation.
 
-### 10.1 Common mappings
+### 12.3 Design system
 
-| Web | Native Compose |
-|---|---|
-| HTML `div` containers | `Box`, `Row`, `Column` |
-| Flexbox | `Row` / `Column` + weights/arrangement |
-| CSS grid | `LazyVerticalGrid`, custom layouts |
-| CSS variables | Compose design tokens / theme |
-| CSS classes | reusable composables + modifiers |
-| external HTML templates | composable functions |
-| modal overlays | Dialog, bottom sheet or full-screen route |
-| canvas world map | Compose `Canvas` / custom drawing |
-| media queries | window constraints / size classes |
-| click handlers | `clickable` / semantic buttons |
-| pointer gestures | `pointerInput` gesture handling |
-| animation | Compose animation APIs |
+Standardise semantic tokens for:
 
-### 10.2 Design system first
+- colours/states;
+- typography;
+- spacing;
+- radii/borders/elevation;
+- icon/image sizing;
+- progress/selection/warning treatment;
+- touch targets;
+- animation timing;
+- subtle haptic intent.
 
-Before mass UI migration, create reusable MineIT-native primitives:
+Create reusable composables when genuine repetition appears: panels, section headers, resource cards, stat rows, buttons, status badges, progress, list rows, dialogs/sheets, building/ship cards and common empty/error states.
 
-- resource/status card;
-- compact stat row;
-- section header;
-- primary/secondary/icon action buttons;
-- warning/critical states;
-- modal/sheet shell;
-- list/card containers;
-- progress meters;
-- resource icon/image treatment;
-- game typography and spacing tokens.
+### 12.4 Consistency audit
 
-This prevents every screen from inventing independent styling.
+When migrating screens, explicitly normalise repeated concepts such as resource quantities, money, capacity, Power/workforce/Industry state, building levels/actions, ship capacities/status, contract/buyer status, warnings, progress, selection and formatting.
 
-### 10.3 Preserve the successful activation rule
-
-The web cleanup established an important interaction rule: normal activation uses one standard click path while pointer events are reserved for gestures.
-
-Preserve the same intent natively:
+## 13. Native interaction, accessibility and lifecycle
 
 - normal taps use Compose semantic click handling;
-- pointer input is used for drag, long press and multi-select;
-- do not create competing tap and pointer-up activation paths;
-- gesture consumption must suppress the associated normal activation when appropriate.
+- pointer input is for real gestures such as drag/long-press/multi-select;
+- do not recreate competing pointer-up/tap activation paths;
+- Android Back should behave consistently through navigation/dialogs;
+- touch targets and accessibility semantics are requirements;
+- use scoped coroutines/ViewModels to reject stale asynchronous writes;
+- use haptics sparingly and consistently for meaningful actions;
+- lifecycle persistence is explicit and testable.
 
-### 10.4 Async UI safety
+## 14. Developer diagnostics opportunity
 
-Web code currently needs explicit stale-DOM protection. Compose makes this easier, but the underlying requirement remains.
+Create a development-only diagnostics surface as migration progresses. It should expose useful reproducibility information, not production cheats by accident.
 
-Use coroutine cancellation, scoped ViewModels and state identity. Results for a ship/colony/tile that is no longer selected must not update a newly selected object.
+Expected debug information/actions include, where implemented:
 
----
+- app/game version;
+- native save format version;
+- Universe content/schema version and source commit;
+- current absolute day;
+- random seed/state;
+- active colony;
+- pending corporate events;
+- key Power/workforce/Industry summaries;
+- save/backup health;
+- import/export save;
+- copy diagnostics;
+- deterministic advance-day controls for testing.
 
-## 11. Web-to-Android ownership map
+Keep debug-only actions out of release UX unless deliberately promoted to a supported feature.
 
-| Current web owner | Native target | Migration rule |
+## 15. Web-to-Android ownership map
+
+| Current web owner | Native target | Rule |
 |---|---|---|
-| `js/core/config.js` | `domain/config` | Convert magic/global constants into typed configuration/value objects. |
-| `js/core/game-store.js` | `app/GameSession` | Replace mutable observable root with immutable `StateFlow` boundary. |
-| `js/domain/game-state*.js` | `domain/model` + `data/save/migration` | Separate current schema from legacy migration logic. |
-| `js/domain/simulation-engine.js` | `domain/simulation` | Port behaviour with parity fixtures before optimisation. |
-| `js/domain/*-service.js` | matching feature packages | Preserve semantic owners; remove browser dependencies. |
-| `js/data/*.js` | typed Kotlin definitions or bundled JSON adapters | Keep static data out of UI. |
-| `js/persistence/save-repository.js` | `data/save/SaveRepository` | Atomic files, backup and explicit migration. |
-| `js/app.js` | composition + session + clock + coordinators | Split responsibilities; do not create another monolith. |
-| `js/ui/*.js` | feature ViewModels + composables | UI renders state and emits intent only. |
-| `views/*.html` | composables | Translate layout, not DOM mechanics. |
-| `css/*` | theme/design tokens/modifiers | Consolidate reusable visual rules. |
-| world/star-map canvas | Compose Canvas | Preserve interaction and rendering behaviour with native input. |
-| browser lifecycle cleanup | coroutine/ViewModel/Compose lifecycle | Use explicit scopes and `DisposableEffect` only where needed. |
-| Node/browser tests | JUnit + Compose + screenshot/instrumentation tests | Port behavioural intent, not implementation-string assertions. |
+| `js/core/config.js` | `domain/config` | typed configuration/value objects |
+| `js/core/game-store.js` | `app/GameSession` | immutable StateFlow boundary |
+| `js/domain/game-state*.js` | `domain/model` + save migrations | separate current schema from legacy import |
+| `js/domain/simulation-engine.js` | `domain/simulation` | parity first, optimise later |
+| `js/domain/*-service.js` | matching feature packages | preserve semantic ownership |
+| `js/data/*.js` | typed definitions/bundled adapters | static data outside UI |
+| `js/persistence/save-repository.js` | `data/save` | atomic files + backup + migrations |
+| `js/app.js` | composition/session/clock/coordinators | split responsibilities |
+| `js/ui/*.js` | feature ViewModels/composables | render state + emit intent |
+| `views/*.html` | composables | translate layout, not DOM mechanics |
+| `css/*` | design tokens/modifiers/components | consolidate visual rules |
+| map/star canvas | Compose Canvas/custom drawing | native input/rendering |
+| browser lifecycle | coroutine/ViewModel/Compose lifecycle | scoped ownership |
+| Node/browser tests | JUnit/Compose/screenshot/instrumentation | preserve behavioural intent |
 
----
-
-## 12. Domain migration inventory
+## 16. Domain migration inventory
 
 Every current semantic owner must be accounted for before web retirement.
 
-### Core state and simulation
+### Core state/simulation
 
-- [ ] `game-state.js`
-- [ ] `game-state-runtime.js`
-- [ ] `simulation-engine.js`
-- [ ] `game-store.js` responsibilities
-- [ ] `config.js`
-- [ ] game date / absolute-day handling
-- [ ] speed and pause behaviour
-- [ ] game log/telemetry
+- [ ] state creation/current schema;
+- [ ] web v16 import/migrations;
+- [ ] simulation engine;
+- [ ] root-state ownership;
+- [ ] game date/absolute day;
+- [ ] speed/pause;
+- [ ] deterministic RNG;
+- [ ] game log/telemetry.
 
-### Resources, production and infrastructure
+### Resources/colony/infrastructure
 
-- [ ] `resource-service.js`
-- [ ] `inventory-service.js`
-- [ ] `collection-service.js`
-- [ ] `colony-service.js`
-- [ ] `site-service.js`
-- [ ] `development-service.js`
-- [ ] `building-model.js`
-- [ ] `spaceport-model.js`
-- [ ] `extraction-overdrive.js`
-- [ ] Power network
-- [ ] workforce network
-- [ ] Industry network
-- [ ] Headquarters command/outage/recovery
-- [ ] Food/Fuel/Ore/Build production and consumption
-- [ ] depletion/renewable behaviour
+- [ ] resources and definitions;
+- [ ] generic inventory + quality bands;
+- [ ] collection/depletion/renewables;
+- [ ] colony demand/workforce/Industry;
+- [ ] site development;
+- [ ] buildings/Spaceport;
+- [ ] Power network;
+- [ ] Headquarters command/outage/recovery;
+- [ ] current Food/Fuel/Ore/Build behaviour.
 
-### World and surveying
+### World/survey
 
-- [ ] `world-service.js`
-- [ ] `land-service.js`
-- [ ] `survey-service.js`
-- [ ] tile generation/state
-- [ ] scan queue and resurvey history
-- [ ] map camera / focus / filters
-- [ ] tap, inspect, long-press and multi-select
+- [ ] world/land generation;
+- [ ] tile state;
+- [ ] scanning/resurvey history;
+- [ ] scan queue;
+- [ ] camera/focus/filters;
+- [ ] tap/inspect/long-press/multi-select.
 
-### Technology and progression
+### Technology/progression
 
-- [ ] `technology-service.js`
-- [ ] technology definitions
-- [ ] engineering deployments
-- [ ] local vs company technology
-- [ ] upgrade eligibility
-- [ ] progression visibility/unlocks
+- [ ] technology definitions/service;
+- [ ] company vs local technology;
+- [ ] engineering deployments;
+- [ ] upgrade eligibility;
+- [ ] progression visibility/unlocks.
 
-### Contracts and corporation
+### Contracts/corporation
 
-- [ ] `contract-service.js`
-- [ ] `portfolio-service.js`
-- [ ] `corporate-event-service.js`
-- [ ] colony creation/switch/removal/relocation
-- [ ] deadlines, renewal/holdover/end states
-- [ ] corporation game-over handling
-- [ ] reputation
-- [ ] asset/cash policy behaviour already present
+- [ ] contract service;
+- [ ] portfolio/multi-colony lifecycle;
+- [ ] corporate event sequencing;
+- [ ] colony creation/switch/removal/relocation;
+- [ ] deadlines/renewal/holdover/end states;
+- [ ] game-over;
+- [ ] reputation/cash/asset behaviour already present.
 
-### Trade and buyers
+### Trade/buyers
 
-- [ ] `trade-service.js`
-- [ ] `buyer-service.js`
-- [ ] buyer market definitions/balance
-- [ ] corporate trade ship events
-- [ ] import/export capacity
-- [ ] reserves
-- [ ] buyer offers/contracts/collections
-- [ ] relationship/happiness/misses/termination
+- [ ] trade service;
+- [ ] buyer service/market definitions;
+- [ ] corporate ship events;
+- [ ] import/export capacity/reserves;
+- [ ] offers/contracts/collections;
+- [ ] relationship/miss/termination behaviour.
 
-### Ships and expansion
+### Ships/expansion
 
-- [ ] `expansion-service.js`
-- [ ] `ship-market-service.js`
-- [ ] `transport-service.js`
-- [ ] starter/founding ship
-- [ ] passenger/accommodation allocation
-- [ ] cargo/Fuel
-- [ ] factory-new ship purchasing
-- [ ] ship locations/states
-- [ ] star/system navigation already implemented
-- [ ] future approved system navigation/fuel/wear items integrated as they land in the web source or are deliberately implemented native-first
+- [ ] expansion service;
+- [ ] ship market;
+- [ ] transport;
+- [ ] founding ship;
+- [ ] passengers/accommodation;
+- [ ] cargo/current Fuel behaviour;
+- [ ] procurement;
+- [ ] location/travel state;
+- [ ] star/system/planet navigation;
+- [ ] later approved Fuel/wear/navigation additions at their deliberate roadmap point.
 
 ### Shared Universe
 
-- [ ] ship classes/runtime profiles
-- [ ] manufacturer/organisation data
-- [ ] art/image-key mapping
-- [ ] manifest/content-version validation
-- [ ] bundled fallback/snapshot strategy
+- [ ] snapshot sync/validation;
+- [ ] ship classes/runtime profiles;
+- [ ] organisations/manufacturers used by MineIT;
+- [ ] art/image-key mapping;
+- [ ] provenance reporting;
+- [ ] offline load validation.
 
----
+## 17. Migration strategy — vertical slices, not big bang
 
-## 13. Migration strategy: vertical slices, not a big-bang rewrite
-
-After the native foundation is established, migrate playable vertical slices. Each slice should finish with domain tests, persistence coverage and enough UI to hands-on test the behaviour.
+Each phase ends with tests and a usable/inspectable result. Do not carry several half-ported engines in production simultaneously.
 
 ### Phase 0 — Baseline and migration harness
 
-**Goal:** freeze a measurable reference point.
+**Goal:** freeze a measurable reference point and make parity executable.
 
 Tasks:
 
-- [ ] record source web commit/version/save version in this document;
-- [ ] inventory domain owners and important screens;
-- [ ] preserve current web CI as behavioural reference;
-- [ ] create cross-runtime JSON fixtures from representative web saves;
-- [ ] create a parity-fixture directory in Android;
-- [ ] define intentional-divergence log format;
-- [ ] remove/rename the POC `DemoGame` types before production models use those names.
+- [x] record source web commit/version/save version;
+- [x] inventory domain owners and important player flows;
+- [x] explicitly retain current web CI as behavioural reference;
+- [x] create parity-fixture structure in Android;
+- [x] add the first representative web-v16 multi-colony/state fixture;
+- [x] add a JVM fixture loader/test;
+- [x] define the intentional-divergence log;
+- [x] isolate the throwaway POC domain under explicit `domain/poc` / `Poc*` names;
+- [ ] obtain final green Android CI for the Phase 0 head.
 
-Exit gate:
-
-- Android can load test fixtures representing realistic web state without implementing gameplay yet.
+Exit gate: Android JVM tests load/validate representative web state without production gameplay being implemented yet.
 
 ### Phase 1 — Native state and persistence foundation
 
-**Goal:** establish production-quality root ownership before porting gameplay.
+**Goal:** production-quality root ownership before gameplay porting.
 
-Tasks:
-
-- [ ] define canonical Android `GameState`/value types;
+- [ ] define canonical `GameState` and selected value/ID types;
+- [ ] establish resource-safe generic identity/quantity/quality foundations without changing the catalogue;
 - [ ] implement `GameSession`;
 - [ ] implement `SaveEnvelope`;
-- [ ] implement atomic save + backup;
-- [ ] add save round-trip tests;
+- [ ] implement atomic active-save + backup repository;
+- [ ] add round-trip/recovery tests;
 - [ ] implement web-v16 importer skeleton;
-- [ ] move UI preferences out of durable gameplay state where proven safe;
-- [ ] implement explicit native migration chain.
+- [ ] implement explicit native migration chain;
+- [ ] separate proven transient preferences from durable gameplay state;
+- [ ] add initial development diagnostics for save/schema/source provenance.
 
-Exit gate:
+Exit gate: canonical simple native state survives save/load/process-style recreation tests and the v16 importer can parse/validate representative source state.
 
-- a simple state survives process restart and schema migration tests.
+### Phase 2 — Core data, current resources and deterministic world
 
-### Phase 2 — Core data, resources and deterministic world
+**Goal:** replace illustrative POC data/map with real MineIT Contract 01 definitions while preserving current behaviour.
 
-**Goal:** replace illustrative POC resources/map with real MineIT definitions.
+- [ ] typed configuration;
+- [ ] current resource definitions using stable IDs/generic inventory architecture;
+- [ ] current quality bands;
+- [ ] current Contract 01 starter data;
+- [ ] seeded world/tile generation;
+- [ ] survey discovery rules;
+- [ ] central resource compatibility ownership where parity-safe;
+- [ ] generation/discovery parity fixtures.
 
-Tasks:
-
-- [ ] migrate configuration constants into typed Kotlin;
-- [ ] migrate resource definitions;
-- [ ] migrate inventory quality bands;
-- [ ] migrate contract starter data needed by Contract 01;
-- [ ] migrate world/tile generation;
-- [ ] preserve seeded generation;
-- [ ] migrate survey discovery rules;
-- [ ] add fixture tests for generated sectors and discovered resources.
-
-Exit gate:
-
-- a new real Contract 01 world can be generated and surveyed identically enough to the reference rules.
+Exit gate: a real Contract 01 world can be generated and surveyed with reference-compatible outcomes.
 
 ### Phase 3 — Colony survival and daily simulation
 
-**Goal:** make the first colony genuinely playable.
+- [ ] collection;
+- [ ] colony networks;
+- [ ] current resource demand/consumption;
+- [ ] Food/Power/Fuel survival;
+- [ ] mortality/colony death;
+- [ ] production/operating costs;
+- [ ] `SimulationClock`;
+- [ ] deterministic RNG path;
+- [ ] long-running soak fixtures.
 
-Tasks:
-
-- [ ] port CollectionService behaviour;
-- [ ] port ColonyService networks;
-- [ ] port resource demand/consumption;
-- [ ] port Food/Power/Fuel survival;
-- [ ] port mortality and colony death;
-- [ ] port production and operating costs;
-- [ ] implement `SimulationClock`;
-- [ ] port relevant long-running soak fixtures.
-
-Exit gate:
-
-- advancing days in Android produces matching Contract 01 survival outcomes for reference fixtures.
+Exit gate: Android day progression matches representative Contract 01 survival fixtures.
 
 ### Phase 4 — Buildings, sites, Industry and Headquarters
 
-**Goal:** migrate colony development and current Stage 1–6 infrastructure.
-
-Tasks:
-
-- [ ] building placement/demolition;
-- [ ] extraction-site development/upgrades;
-- [ ] housing and Industry;
+- [ ] placement/demolition;
+- [ ] extraction development/upgrades;
+- [ ] housing/Industry;
 - [ ] Spaceport;
-- [ ] Power generation and priority allocation;
+- [ ] Power priority/allocation;
 - [ ] Headquarters command capacity/load;
-- [ ] first-departure gate;
-- [ ] Headquarters outage/degradation/recovery;
-- [ ] ship temporary command takeover;
-- [ ] construction/resource costs.
+- [ ] departure gate;
+- [ ] HQ outage/degradation/recovery;
+- [ ] temporary ship command takeover;
+- [ ] current construction/resource costs.
 
-Exit gate:
+Exit gate: Headquarters/Power regression scenarios pass natively.
 
-- the existing Headquarters and Power regression scenarios pass natively.
+### Phase 5 — Main native game UI/map and design-system foundation
 
-### Phase 5 — Main native game UI and map interaction
-
-**Goal:** replace the POC screen with the real playable MineIT shell.
-
-Tasks:
-
-- [ ] native MineIT status/resource header;
+- [ ] production MineIT design tokens;
+- [ ] first reusable native primitives;
+- [ ] consistent resource/status header;
 - [ ] real map tiles/art;
-- [ ] tap to inspect/select;
-- [ ] tap unrevealed sector to survey;
+- [ ] inspect/select/survey;
 - [ ] hold/drag multi-select;
-- [ ] queue/status presentation;
-- [ ] map filters/focus;
+- [ ] queue/filter/focus presentation;
 - [ ] building/site panels;
-- [ ] colony status/power detail;
-- [ ] responsive phone layouts;
-- [ ] Compose previews and screenshot baselines.
+- [ ] colony/Power detail;
+- [ ] responsive phone layout;
+- [ ] previews/screenshot baselines;
+- [ ] accessibility/back/haptic conventions.
 
-Exit gate:
-
-- core first-colony gameplay can be played without the web app.
+Exit gate: core first-colony gameplay is hands-on playable without web UI and key visual concepts use one design language.
 
 ### Phase 6 — Trade, contracts and commercial events
 
-**Goal:** reproduce the commercial loop.
-
-Tasks:
-
-- [ ] corporate trade ship arrival/departure;
-- [ ] buy/sell flows;
-- [ ] trade capacity and reserves;
+- [ ] trade ship arrival/departure;
+- [ ] buy/sell;
+- [ ] capacity/reserves;
 - [ ] contract goals/deadlines/decisions;
 - [ ] corporate event queue;
-- [ ] pause/resume behaviour around events;
+- [ ] event pause/resume;
 - [ ] buyer offers/contracts/collections;
-- [ ] game log events.
+- [ ] game log presentation.
 
-Exit gate:
+Exit gate: Contract 01 commercial progression/resolution works natively.
 
-- Contract 01 can be commercially progressed and resolved in Android.
+### Phase 7 — Portfolio and multi-colony
 
-### Phase 7 — Portfolio and multi-colony management
-
-**Goal:** reproduce corporation-level play.
-
-Tasks:
-
-- [ ] portfolio state model;
-- [ ] colony switching;
-- [ ] inactive-colony daily simulation;
-- [ ] colony-local state capture;
-- [ ] global date handling;
-- [ ] cross-colony pending event sequencing;
-- [ ] colony loss/game-over behaviour;
+- [ ] portfolio state;
+- [ ] switching;
+- [ ] inactive-colony simulation;
+- [ ] local state capture;
+- [ ] global date;
+- [ ] cross-colony events;
+- [ ] colony loss/game-over;
 - [ ] multi-colony UI.
 
-Exit gate:
-
-- realistic multi-colony web save fixtures round-trip and simulate correctly natively.
+Exit gate: representative multi-colony fixtures round-trip and simulate correctly.
 
 ### Phase 8 — Ships, expansion and ship market
 
-**Goal:** reproduce current Stage 6–8 ship gameplay.
-
-Tasks:
-
-- [ ] fleet state;
-- [ ] founding ship;
+- [ ] fleet/founding ship;
 - [ ] cargo/passengers/accommodation;
-- [ ] docked/landed/travel states;
-- [ ] factory-new ship catalogue;
-- [ ] ship purchase rules;
+- [ ] docked/landed/travel state;
+- [ ] factory-new catalogue/procurement;
 - [ ] transport orders;
-- [ ] star/system map presentation;
-- [ ] current navigation behaviour;
-- [ ] integrate newly approved spacecraft Fuel/navigation/wear systems at the correct point in the migration.
+- [ ] star/system map;
+- [ ] current navigation;
+- [ ] integrate newly approved future ship systems only when their roadmap work is deliberately taken on.
 
-Exit gate:
+Exit gate: current ship/fleet/market regression scenarios pass natively.
 
-- current ship/fleet/market web regression scenarios pass natively.
+### Phase 9 — Remaining UI parity and consistency closure
 
-### Phase 9 — Remaining UI parity and polish
-
-**Goal:** close all presentation gaps.
-
-Tasks include:
-
-- [ ] company/corporation views;
+- [ ] company/corporation;
 - [ ] contract board;
-- [ ] technology and engineering screens;
-- [ ] buyer screens;
+- [ ] technology/engineering;
+- [ ] buyers;
 - [ ] survival warnings;
-- [ ] trade/reserve controls;
+- [ ] trade/reserves;
 - [ ] ship controls;
 - [ ] overlays/toasts/dialogs;
-- [ ] how-to-play/onboarding;
-- [ ] game-over/lost-colony flows;
-- [ ] accessibility labels and touch targets;
-- [ ] haptics where useful;
+- [ ] onboarding/help;
+- [ ] lost-colony/game-over;
+- [ ] full consistency audit across migrated concepts;
 - [ ] landscape/large-screen sanity.
 
-Exit gate:
-
-- a feature inventory comparison identifies no required web-only player flow.
+Exit gate: no required web-only player flow and no major known visual/interaction inconsistency remains.
 
 ### Phase 10 — Production hardening and cutover
 
-**Goal:** make native Android the primary implementation.
-
-Tasks:
-
-- [ ] import real representative web saves;
-- [ ] full simulation soak;
-- [ ] Compose screenshot regression suite;
+- [ ] representative real web-save imports;
+- [ ] full deterministic soak;
+- [ ] screenshot regression suite;
 - [ ] key instrumentation tests;
-- [ ] performance profiling on representative Android hardware;
-- [ ] memory/leak checks around map/screens;
-- [ ] app lifecycle save/recovery testing;
-- [ ] release signing/upload-key configuration;
+- [ ] performance profiling;
+- [ ] memory/leak checks;
+- [ ] lifecycle save/recovery;
+- [ ] production signing/Play upload key;
 - [ ] R8 release verification;
-- [ ] offline cold-start test;
-- [ ] final source feature matrix;
-- [ ] user hands-on approval;
-- [ ] declare native canonical implementation.
+- [ ] Universe snapshot validation + offline cold start;
+- [ ] final feature matrix;
+- [ ] hands-on approval;
+- [ ] declare native implementation canonical.
 
-The web repository should remain available as history/reference, but new gameplay development should then move to Android unless a web edition is deliberately maintained as a separate supported product.
+## 18. Cross-runtime parity testing
 
----
+Fixtures live under `app/src/test/resources/parity/`.
 
-## 14. Behaviour parity and cross-runtime testing
+Each important parity scenario records:
 
-A rewrite is most dangerous when both implementations appear correct but differ subtly. MineIT should use fixture-driven parity during migration.
+- exact source commit/game/save version;
+- starting state/input;
+- action/day sequence;
+- deterministic random state where relevant;
+- expected canonical summary/important durable fields.
 
-### 14.1 Golden fixtures
+Examples include:
 
-For important systems create JSON fixtures containing:
-
-- initial state;
-- action/day count;
-- deterministic random seed where applicable;
-- expected result summary;
-- expected important state fields.
-
-Examples:
-
-- one day of stable survival;
+- stable day advance;
 - Power shortage;
 - beginning-of-day Fuel use;
-- extraction-site depletion;
+- depletion/renewable events;
 - starvation progression;
-- Headquarters outage day 1/5/10;
+- HQ outage/recovery;
 - survey discovery;
 - building upgrade;
 - trade transaction;
 - buyer collection;
-- multi-colony day advance;
+- multi-colony day;
 - ship cargo/passengers;
-- save v16 migration.
+- web v16 import.
 
-During migration, the web implementation can generate/validate the fixture and the Kotlin implementation must satisfy the same behavioural contract.
+Compare gameplay meaning, not object ordering, DOM shape or irrelevant floating-point formatting.
 
-### 14.2 Do not compare irrelevant representation
+## 19. Test migration map
 
-Parity tests should compare gameplay meaning rather than object ordering, floating-point formatting or DOM presentation.
-
-Where Kotlin intentionally improves representation, compare canonical summaries.
-
----
-
-## 15. Test migration map
-
-The current web test suite is extensive and must be treated as a behaviour inventory.
-
-| Web test class | Android replacement |
+| Web coverage | Native replacement |
 |---|---|
-| architecture baseline / owner-map tests | package/dependency architecture tests + code review rules |
-| domain service tests | Kotlin/JUnit domain tests |
-| save round-trip tests | serialization + migration fixture tests |
+| architecture/owner tests | package/dependency guards + code review rules |
+| domain tests | Kotlin/JUnit domain tests |
+| save round-trip | serialization/migration/recovery fixtures |
 | long simulation soak | deterministic JVM soak tests |
-| browser interaction probes | Compose instrumentation tests |
-| layout/presentation regression | Compose screenshot tests |
+| browser interaction probes | Compose instrumentation |
+| presentation regression | Compose screenshot tests |
 | mobile viewport probes | device/configuration screenshot/instrumentation matrix |
-| lifecycle soak | Compose/navigation/ViewModel lifecycle tests |
-| canvas interaction probes | Compose UI tests plus focused gesture tests |
+| lifecycle soak | ViewModel/navigation/lifecycle tests |
+| canvas gesture probes | Compose focused gesture tests |
 
-CI should remain layered so fast JVM tests run first and emulator work is reserved for interactions that cannot be proven without Android runtime.
+Keep CI layered: fast JVM tests first, emulator work only where Android runtime is necessary.
 
----
+## 20. Architecture improvements explicitly allowed during the port
 
-## 16. Known architecture improvements to make during the port
+These preserve intended gameplay unless separately logged:
 
-These are migration opportunities, not criticism of the cleaned web architecture.
+- split `app.js` responsibilities into composition/session/clock/coordinators;
+- replace service back-patching with constructor/narrow-interface dependencies;
+- narrow feature ViewModel dependencies;
+- explicit save migrations;
+- durable/derived/transient state separation;
+- reproducible randomness;
+- rendering/simulation decoupling;
+- selected strong IDs/value types;
+- generic/stable resource identity/inventory architecture;
+- centralised compatibility ownership;
+- build-time Universe snapshot validation;
+- consistent Compose design system;
+- development-only reproducibility diagnostics;
+- Android-native accessibility/back/haptic behaviour.
 
-### 16.1 Split `app.js` responsibilities
+KISS/YAGNI still applies: do not implement abstractions without a present migration or known-roadmap need.
 
-Do not recreate its current breadth in one Kotlin class.
+## 21. Rules for bugs and intentional divergence
 
-Separate:
+### Clear defect
 
-- dependency construction;
-- GameSession/state ownership;
-- simulation scheduling;
-- corporate-event coordination;
-- UI navigation;
-- lifecycle persistence.
+1. identify root cause;
+2. add/strengthen regression coverage;
+3. preferably correct the web canonical owner first while it remains maintained;
+4. port corrected behaviour;
+5. log the difference if web cannot reasonably be corrected.
 
-### 16.2 Remove service back-patching
+### Platform/architecture debt
 
-The web composition root currently constructs services and then assigns some collaborators after construction.
-
-Native code should prefer constructor dependencies or narrow interfaces so dependency relationships are explicit and immutable after creation.
-
-### 16.3 Narrow UI dependencies
-
-Some web UI controllers receive a very broad bundle of services/callbacks.
-
-Native feature ViewModels should depend only on the use cases/state they require.
-
-### 16.4 Make save migrations explicit
-
-Move legacy compatibility out of canonical model construction. Keep migrations ordered, named and testable.
-
-### 16.5 Improve durable/transient state separation
-
-Audit persisted camera, speed, diagnostics/metrics and presentation-related selections. Store preferences/session state separately when doing so does not change gameplay behaviour.
-
-### 16.6 Make randomness reproducible
-
-Any hidden use of global randomness should become an injected/persisted domain random source.
-
-### 16.7 Separate simulation cadence from rendering
-
-No gameplay progression should depend on Compose frame rate or UI recomposition.
-
-### 16.8 Prefer typed value objects for important concepts
-
-Candidates include:
-
-- `AbsoluteDay` / `GameDate`;
-- `ColonyId`;
-- `ShipId`;
-- resource identifiers;
-- money/quantity where useful;
-- quality bands;
-- percentage/factor values where range validation prevents bugs.
-
-Use this selectively; do not wrap every primitive merely for architectural appearance.
-
----
-
-## 17. Rules for fixing bugs during migration
-
-The migration is explicitly allowed to improve code and correct issues, but every divergence from the web reference must be intentional.
-
-### Clear gameplay bug
-
-If an existing web behaviour is clearly defective:
-
-1. identify the root cause;
-2. add/strengthen a regression test;
-3. preferably correct the canonical web reference first while it remains actively maintained;
-4. port the corrected behaviour to Android;
-5. record the divergence if the web fix cannot reasonably be made.
-
-Do not intentionally reproduce a known bug simply to make parity tests green.
-
-### Architecture/browser-specific debt
-
-If the problem exists only because of web technology, fix it in the native design without changing gameplay semantics.
-
-Examples include DOM lifecycle, stale template writes and animation-frame scheduling.
+Fix browser-only implementation debt natively without changing gameplay semantics; no divergence entry is needed when behaviour is equivalent.
 
 ### Gameplay/design change
 
-If a change alters intended rules, balancing or progression, it is not merely migration cleanup. Route it through the progression backlog/discovery process unless the user explicitly approves doing it as part of the migration.
+Route material rule/balance/progression changes through discovery/backlog unless explicitly approved as migration work.
 
-### Migration decision log
+All deliberate semantic differences are recorded in [`migration/INTENTIONAL_DIVERGENCES.md`](./migration/INTENTIONAL_DIVERGENCES.md).
 
-Add short dated entries to this document whenever an intentional behavioural divergence is introduced:
+## 22. Branch/delivery workflow
 
-```text
-YYYY-MM-DD — Area — Web behaviour — Native behaviour — Reason — Tests
-```
+For each migration slice:
 
----
-
-## 18. Resource-overhaul interaction with the migration
-
-The current web game still has a resource-model audit and later refining/manufacturing work in the progression backlog. Current categories remain Food, Build, Fuel and Ore with individual raw resource definitions.
-
-Do not hard-code the native architecture so tightly around those four categories that the approved resource overhaul becomes another rewrite.
-
-The native model should support:
-
-- stable resource IDs;
-- resource category/type definitions;
-- raw/refined/manufactured classifications;
-- qualities/quantity;
-- extraction/production compatibility;
-- future recipes;
-- future ship Fuel types;
-- data-driven display metadata.
-
-However, do not implement unapproved refining/manufacturing mechanics merely to anticipate them. Design the model to accommodate the known roadmap, then migrate current behaviour first.
-
----
-
-## 19. Branch and delivery workflow
-
-Recommended migration workflow:
-
-1. branch from current Android `main` for one migration slice;
-2. read this document and `AGENTS.md` before implementation;
-3. record the source MineIT commit being used for that slice;
-4. inspect the source implementation and its tests;
+1. branch from current Android `main`;
+2. read Android `AGENTS.md` and this guide;
+3. read source MineIT `AGENTS.md` and relevant source/tests;
+4. record exact source commit;
 5. add parity/regression fixtures first where valuable;
-6. implement the canonical native owner;
-7. update UI only after domain behaviour is available;
+6. implement one canonical native owner;
+7. migrate UI after domain capability exists;
 8. run focused tests;
-9. run full required Android CI;
-10. produce a directly downloadable APK for hands-on checks when appropriate;
-11. update this document's checklist/status;
+9. run full Android CI;
+10. produce an APK for hands-on checks when useful;
+11. update migration docs/status;
 12. merge after acceptance.
 
-Avoid enormous migration branches containing unrelated systems.
+Avoid giant migration branches containing unrelated phases.
 
----
+## 23. Definition of done for a migrated feature
 
-## 20. Definition of done for a migrated feature
+A feature is migrated only when applicable items are true:
 
-A web feature is considered migrated only when all applicable conditions are true:
-
-- [ ] its canonical web implementation and relevant tests were inspected;
-- [ ] its native semantic owner is clear;
-- [ ] gameplay behaviour is implemented without UI ownership leakage;
-- [ ] persistence is handled where the feature adds durable state;
-- [ ] legacy/import migration is handled where needed;
-- [ ] domain regression/parity tests exist;
-- [ ] Compose/instrumentation coverage exists for important interactions;
+- [ ] source owner/tests inspected;
+- [ ] native semantic owner clear;
+- [ ] gameplay implemented without UI ownership leakage;
+- [ ] save/import/migration handled where needed;
+- [ ] parity/domain regression coverage exists;
+- [ ] important UI interaction coverage exists;
+- [ ] design-system conventions used rather than isolated styling;
 - [ ] no duplicate temporary production implementation remains;
-- [ ] known divergences are documented;
-- [ ] Android CI is green;
-- [ ] the feature can be hands-on tested in the APK;
-- [ ] this migration checklist is updated.
+- [ ] intentional divergences recorded;
+- [ ] Android CI green;
+- [ ] hands-on test possible where relevant;
+- [ ] migration checklist/status updated.
 
----
+## 24. Production cutover criteria
 
-## 21. Production cutover criteria
+Do not retire the web implementation as behavioural reference until:
 
-Do not retire the web implementation as the behavioural reference until the native app satisfies all of the following:
-
-1. Contract 01 can be started, played, saved, reloaded and completed.
-2. Survival/economy results pass representative parity fixtures.
-3. Power, Industry, workforce and Headquarters behaviour is covered.
-4. Surveying, map gestures and development are complete.
-5. Trade and corporate event flows are complete.
-6. Multiple colonies simulate and switch correctly.
+1. Contract 01 starts, plays, saves, reloads and completes.
+2. Survival/economy parity fixtures pass.
+3. Power/Industry/workforce/HQ behaviour is covered.
+4. Survey/map/development interaction is complete.
+5. Trade/corporate event flows are complete.
+6. Multiple colonies simulate/switch correctly.
 7. Current ship/fleet/market behaviour is complete.
-8. MineIT-Universe data/art is bundled and validated.
-9. Representative web v16 saves import correctly if save continuity is required.
-10. Long simulation soak passes.
-11. Android lifecycle/process restart does not lose valid state.
-12. Production signing strategy is complete.
-13. No required player flow remains web-only.
-14. Hands-on approval is given on a production-like Android build.
+8. MineIT-Universe data/art is bundled, validated and offline.
+9. representative web v16 saves import correctly if continuity is required.
+10. deterministic long soak passes.
+11. lifecycle/process recreation cannot silently lose valid state.
+12. production signing is complete.
+13. no required web-only player flow remains.
+14. consistency audit has no major unresolved visual/interaction split.
+15. hands-on approval is given on a production-like build.
 
----
-
-## 22. Current migration status
+## 25. Current migration status
 
 ### Proven by the POC
 
-- [x] Kotlin/Jetpack Compose project builds in CI.
-- [x] Native UI runs on a physical Android device.
-- [x] UI and domain code can be separated cleanly.
-- [x] Pure Kotlin simulation can be unit-tested.
-- [x] APK can be produced entirely through CI.
-- [x] App version is visible from real Android build metadata.
-- [x] Persistent development signing is established.
-- [x] Successive APKs update in place without uninstalling.
+- [x] Kotlin/Compose project builds in CI;
+- [x] native UI runs on physical Android hardware;
+- [x] UI/domain separation is viable;
+- [x] pure Kotlin demo simulation is unit-testable;
+- [x] CI produces a real APK;
+- [x] build metadata is visible in-app;
+- [x] persistent development signing is established;
+- [x] successive APK updates install in place.
 
-### Next migration milestone
+### Phase 0 work created
 
-**Phase 0 + Phase 1: replace the illustrative POC state with the real migration foundation.**
+- [x] `docs/migration/PHASE_0_BASELINE.md`;
+- [x] parity-fixture directory and representative web-v16 fixture;
+- [x] JVM parity fixture loader/test;
+- [x] intentional-divergence log;
+- [x] POC domain isolated under `domain/poc`;
+- [x] resource architecture direction captured;
+- [x] design consistency direction captured;
+- [x] Universe bundling direction captured;
+- [ ] final Phase 0 branch CI confirmation.
 
-The next implementation should focus on:
+### Next milestone after Phase 0
 
-1. production package structure inside the current module;
-2. canonical root `GameState` direction;
-3. `GameSession` ownership;
-4. SaveEnvelope/atomic persistence;
-5. web-v16 fixture/import harness;
-6. the first real Contract 01 state fixture.
+**Phase 1 — real native state and persistence foundation.**
 
-This gives every later gameplay port a stable foundation and avoids converting UI before the real state model exists.
+The first production migration code should establish canonical state/value types, resource-safe identity/inventory foundations, `GameSession`, save envelope/atomic backup storage, web-v16 import validation and initial diagnostics before real gameplay UI replaces the POC.
 
----
+## 26. Reference notes
 
-## 23. Migration decision log
+At the migration baseline:
 
-No intentional gameplay divergences recorded yet.
+- web game version: `5.13.15`;
+- web save version: `16`;
+- source commit: `9e58983adaa7a15cd525451266ce9df3c17ae886`;
+- realistic web save coverage already includes multi-colony state, player-ship cargo/passengers/Fuel, engineering deployments, scan history and resource-coverage migration;
+- current web simulation includes Stage 6 Headquarters/Power behaviour;
+- the future resource-economy discovery intentionally remains separate from parity migration, but informs permanent native model shape;
+- the August 2026 cleanup removed versioned production JS/CSS, import-map debt, application globals/document app-event debt and large embedded HTML-template debt;
+- standard activation remains one normal click/tap path with pointer handling reserved for gestures.
 
----
-
-## 24. Reference notes
-
-At the source baseline used to create this plan:
-
-- MineIT package version is `5.13.15`;
-- runtime save state is version `16`;
-- realistic save-roundtrip coverage includes multi-colony state, ship cargo/passengers/Fuel, engineering deployments, scan history and resource-coverage migration;
-- the current simulation includes the Stage 6 Headquarters/Power changes;
-- the progression backlog includes the resource-model audit, spacecraft Fuel, system navigation, Veyrite wear, refining and later manufacturing/logistics work;
-- the August 2026 cleanup removed versioned JS/CSS implementations, import-map debt, application globals/document event-bus debt and large embedded HTML-template debt;
-- the web interaction architecture now uses normal click activation and pointer events only for gestures, a rule that should remain conceptually true in Compose.
-
-This document should be updated whenever the source baseline materially changes or a migration phase is completed.
+Update this guide whenever the source baseline materially changes, a migration decision changes, or a phase completes.
