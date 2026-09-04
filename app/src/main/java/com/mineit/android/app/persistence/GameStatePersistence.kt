@@ -39,4 +39,10 @@ sealed interface PersistenceSaveResult {
 interface GameStatePersistence {
     suspend fun load(): PersistenceLoadResult
     suspend fun save(state: GameState): PersistenceSaveResult
+
+    /**
+     * Writes a deliberate fresh game and discards recovery history from the previous run.
+     * Implementations must not leave a previous-game backup available for later recovery.
+     */
+    suspend fun reset(state: GameState): PersistenceSaveResult
 }
