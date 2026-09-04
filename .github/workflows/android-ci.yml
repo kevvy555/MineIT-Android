@@ -35,6 +35,13 @@ jobs:
       - name: Install stable Android SDK 36
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Prepare persistent development signing key
+        shell: bash
+        run: |
+          package_file="$(npm pack @react-native-community/template@0.83.1 --silent)"
+          tar -xOf "$package_file" package/template/android/app/debug.keystore > app/debug.keystore
+          rm -f "$package_file"
+
       - name: Set up Gradle 9.5
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -42,6 +49,11 @@ jobs:
 
       - name: Run unit tests and build debug APK
         run: gradle testDebugUnitTest assembleDebug --stacktrace
+
+      - name: Report APK signer
+        shell: bash
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
