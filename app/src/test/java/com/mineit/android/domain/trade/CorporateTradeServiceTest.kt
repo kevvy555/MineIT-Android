@@ -2,6 +2,7 @@ package com.mineit.android.domain.trade
 
 import com.mineit.android.domain.model.AbsoluteDay
 import com.mineit.android.domain.model.GameDate
+import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.QualityBand
@@ -13,11 +14,13 @@ import org.junit.Test
 
 class CorporateTradeServiceTest {
     private val service = CorporateTradeService()
+    private val factory = NewGameFactory()
+
+    private fun settled(seed: Long): GameState = factory.settleLandingSite(factory.contract01(seed), 0)
 
     @Test
     fun arrivalUsesPinnedScheduleAndVisitCapacities() {
-        val factory = NewGameFactory()
-        val fresh = factory.contract01(42L)
+        val fresh = settled(42L)
         assertEquals(180, service.daysUntilArrival(fresh))
         val due = fresh.copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         assertTrue(service.shouldArrive(due))
@@ -32,8 +35,7 @@ class CorporateTradeServiceTest {
 
     @Test
     fun reserveProtectsEveryResourceAndHighestQualitySellsFirst() {
-        val factory = NewGameFactory()
-        var state = factory.contract01(7L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
+        var state = settled(7L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
         val colony = state.activeColony
         var inventory = colony.inventory.store(ResourceId("gold"), ResourceCategory.ORE, 100.0, quality = 30)
@@ -51,12 +53,16 @@ class CorporateTradeServiceTest {
         assertEquals(0.0, result.state.activeColony.inventory.find(ResourceId("gold"))!!.qualityBands[QualityBand.EXTRAORDINARY]!!, .0001)
         assertEquals(1_687.5, result.value, .0001)
         assertEquals(33_687.5, result.state.company.cash, .0001)
+        assertEquals(.01, result.state.company.reputation, .0001)
+
+        val second = service.sell(result.state, ResourceId("gold"), 10.0, spaceportServicesAvailable = true)
+        assertTrue(second.ok)
+        assertEquals(.01, second.state.company.reputation, .0001)
     }
 
     @Test
     fun buyRespectsCargoCashAndSpaceportGate() {
-        val factory = NewGameFactory()
-        var state = factory.contract01(9L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
+        var state = settled(9L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
         val blocked = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = false)
         assertFalse(blocked.ok)
@@ -69,5 +75,40 @@ class CorporateTradeServiceTest {
         assertEquals(31_790.0, bought.state.company.cash, .0001)
         assertEquals(100.0, bought.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
         assertEquals(100.0, bought.state.activeColony.trade.cargoUsed, .0001)
+    }
+
+    @Test
+    fun colonistTransferUsesHousingPowerPassengersAndCashAsHardGatesButNotFood() {
+        var state = settled(11L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
+        state = service.arrive(state).state
+        val projection = service.colonistProjection(
+            state = state,
+            supportedPopulationCapacity = 200,
+            foodDailySurplus = 0.0,
+        )
+        assertEquals(80, projection.maxTransfer)
+        assertEquals(0, projection.maxSafeTransfer)
+
+        val transferred = service.transferColonists(
+            state = state,
+            amount = 10,
+            spaceportServicesAvailable = true,
+            supportedPopulationCapacity = 200,
+            foodDailySurplus = 0.0,
+        )
+        assertTrue(transferred.ok)
+        assertEquals(130.0, transferred.state.activeColony.population, .0001)
+        assertEquals(10, transferred.state.activeColony.trade.passengersUsed)
+        assertEquals(29_500.0, transferred.state.company.cash, .0001)
+        assertTrue(transferred.message.contains("Food production does not currently support"))
+
+        val blocked = service.transferColonists(
+            state = state,
+            amount = 81,
+            spaceportServicesAvailable = true,
+            supportedPopulationCapacity = 200,
+            foodDailySurplus = 10_000.0,
+        )
+        assertFalse(blocked.ok)
     }
 }
