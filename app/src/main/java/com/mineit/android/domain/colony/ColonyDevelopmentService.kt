@@ -7,6 +7,7 @@ import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.ExtractionCompatibility
 import com.mineit.android.domain.resources.Inventory
+import com.mineit.android.domain.resources.QualityBand
 import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.resources.ResourceQuality
 import com.mineit.android.domain.world.DevelopmentKind
@@ -29,36 +30,28 @@ class ColonyDevelopmentService(
         if (kind == DevelopmentKind.EXTRACT) return DevelopmentPreview(false, "Use extraction development for resources.")
         val colony = state.activeColony
         val tile = colony.world.tileAt(coordinate) ?: return DevelopmentPreview(false, "Sector not found.")
-        if (val reason = commonBuildBlock(colony, tile)) return DevelopmentPreview(false, reason)
+        commonBuildBlock(colony, tile)?.let { return DevelopmentPreview(false, it) }
         if (tile.terrain == TerrainType.LAKE) return DevelopmentPreview(false, "Standard ${label(kind)} cannot be built on lakes.")
         if (tile.development != null) return DevelopmentPreview(false, "Demolish the existing development first.")
         val cost = InfrastructureRules.buildingCost(kind, 1, tile.terrain)
-        val resourceReason = resourceShortage(colony.inventory, cost.build, cost.ore)
-        if (resourceReason != null) return DevelopmentPreview(false, resourceReason, cost = cost)
+        resourceShortage(colony.inventory, cost.build, cost.ore)?.let { return DevelopmentPreview(false, it, cost = cost) }
         return DevelopmentPreview(true, cost = cost, nextLevel = 1, coversResource = tile.deposit != null)
     }
 
     fun placeBuilding(state: GameState, coordinate: SectorCoordinate, kind: DevelopmentKind): DevelopmentActionResult {
         val preview = buildingPreview(state, coordinate, kind)
         if (!preview.ok) return DevelopmentActionResult(false, state, preview.reason ?: "Building unavailable.")
-        val tile = requireNotNull(state.activeColony.world.tileAt(coordinate))
+        val colony = state.activeColony
+        val tile = requireNotNull(colony.world.tileAt(coordinate))
         val cost = requireNotNull(preview.cost)
-        val inventory = spend(state.activeColony.inventory, cost.build, cost.ore)
         val nextTile = tile.copy(
             resourceCovered = tile.deposit != null,
-            development = TileDevelopment(
-                kind = kind,
-                level = 1,
-                investedBuild = cost.build,
-                investedOre = cost.ore,
-            ),
+            development = TileDevelopment(kind, 1, investedBuild = cost.build, investedOre = cost.ore),
         )
-        var next = state.withActiveColony(
-            state.activeColony.copy(
-                inventory = inventory,
-                world = state.activeColony.world.copy(tiles = replaceTile(state.activeColony.world.tiles, nextTile)),
-            ),
-        )
+        var next = state.withActiveColony(colony.copy(
+            inventory = spend(colony.inventory, cost.build, cost.ore),
+            world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)),
+        ))
         if (kind == DevelopmentKind.HEADQUARTERS) next = headquartersService.synchronizePrimary(next)
         return DevelopmentActionResult(true, next, "${label(kind)} L1 constructed.", cost = cost)
     }
@@ -77,32 +70,29 @@ class ColonyDevelopmentService(
             return DevelopmentPreview(false, "Requires ${label(dev.kind)} Tech L$nextLevel; this colony has deployed L$tech.", nextLevel = nextLevel)
         }
         val cost = InfrastructureRules.buildingCost(dev.kind, nextLevel, tile.terrain)
-        val resourceReason = resourceShortage(colony.inventory, cost.build, cost.ore)
-        if (resourceReason != null) return DevelopmentPreview(false, resourceReason, cost = cost, nextLevel = nextLevel)
+        resourceShortage(colony.inventory, cost.build, cost.ore)?.let {
+            return DevelopmentPreview(false, it, cost = cost, nextLevel = nextLevel)
+        }
         return DevelopmentPreview(true, cost = cost, nextLevel = nextLevel)
     }
 
     fun upgrade(state: GameState, coordinate: SectorCoordinate): DevelopmentActionResult {
-        val tile = state.activeColony.world.tileAt(coordinate) ?: return DevelopmentActionResult(false, state, "Sector not found.")
+        val colony = state.activeColony
+        val tile = colony.world.tileAt(coordinate) ?: return DevelopmentActionResult(false, state, "Sector not found.")
         if (tile.development?.kind == DevelopmentKind.EXTRACT) return upgradeExtraction(state, coordinate)
         val preview = buildingUpgradePreview(state, coordinate)
         if (!preview.ok) return DevelopmentActionResult(false, state, preview.reason ?: "Upgrade unavailable.")
         val cost = requireNotNull(preview.cost)
         val dev = requireNotNull(tile.development)
-        val inventory = spend(state.activeColony.inventory, cost.build, cost.ore)
-        val nextTile = tile.copy(
-            development = dev.copy(
-                level = preview.nextLevel,
-                investedBuild = dev.investedBuild + cost.build,
-                investedOre = dev.investedOre + cost.ore,
-            ),
-        )
-        var next = state.withActiveColony(
-            state.activeColony.copy(
-                inventory = inventory,
-                world = state.activeColony.world.copy(tiles = replaceTile(state.activeColony.world.tiles, nextTile)),
-            ),
-        )
+        val nextTile = tile.copy(development = dev.copy(
+            level = preview.nextLevel,
+            investedBuild = dev.investedBuild + cost.build,
+            investedOre = dev.investedOre + cost.ore,
+        ))
+        var next = state.withActiveColony(colony.copy(
+            inventory = spend(colony.inventory, cost.build, cost.ore),
+            world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)),
+        ))
         if (dev.kind == DevelopmentKind.HEADQUARTERS) next = headquartersService.synchronizePrimary(next)
         return DevelopmentActionResult(true, next, "${label(dev.kind)} upgraded to L${preview.nextLevel}.", cost = cost)
     }
@@ -110,19 +100,21 @@ class ColonyDevelopmentService(
     fun extractionPreview(state: GameState, coordinate: SectorCoordinate): DevelopmentPreview {
         val colony = state.activeColony
         val tile = colony.world.tileAt(coordinate) ?: return DevelopmentPreview(false, "Sector not found.")
-        val deposit = tile.deposit ?: return DevelopmentPreview(false, "No exploitable surface resource on this tile.")
-        if (val reason = commonBuildBlock(colony, tile)) return DevelopmentPreview(false, reason)
+        val deposit = tile.deposit ?: return DevelopmentPreview(false, "No exploitable resource on this tile.")
+        commonBuildBlock(colony, tile)?.let { return DevelopmentPreview(false, it) }
         if (tile.development != null || tile.resourceExhausted || deposit.renewableWiped) return DevelopmentPreview(false, "Site unavailable.")
         if (tile.resourceCovered) return DevelopmentPreview(false, "The resource is covered by another development.")
         if (colony.technology.mining < deposit.requiredMiningLevel) {
             return DevelopmentPreview(false, "Requires Mining L${deposit.requiredMiningLevel}: ${deposit.requiredMiningTech}.")
         }
-        val cost = InfrastructureCost(build = developBuildCost(colony, tile, deposit), ore = 0.0)
-        val workforce = SiteOperationRules.workforceRequirement(colony, tile, 1)
+        val cost = InfrastructureCost(developBuildCost(colony, tile, deposit), 0.0)
+        val workers = SiteOperationRules.workforceRequirement(colony, tile, 1)
         val free = freeWorkforce(state)
-        if (free < workforce) return DevelopmentPreview(false, "Need ${workforce.toInt()} free operational workers; only ${floor(free).toInt()} are available.", cost = cost, workforce = workforce)
-        if (colony.inventory.amountFor(ResourceCategory.BUILD) < cost.build) return DevelopmentPreview(false, "Need ${cost.build.toInt()} Build materials.", cost = cost, workforce = workforce)
-        return DevelopmentPreview(true, cost = cost, nextLevel = 1, workforce = workforce)
+        if (free < workers) return DevelopmentPreview(false, "Need ${workers.toInt()} free operational workers; only ${floor(free).toInt()} are available.", cost = cost, workforce = workers)
+        if (colony.inventory.amountFor(ResourceCategory.BUILD) + .0001 < cost.build) {
+            return DevelopmentPreview(false, "Need ${cost.build.toInt()} Build materials.", cost = cost, workforce = workers)
+        }
+        return DevelopmentPreview(true, cost = cost, nextLevel = 1, workforce = workers)
     }
 
     fun developExtraction(state: GameState, coordinate: SectorCoordinate): DevelopmentActionResult {
@@ -131,17 +123,13 @@ class ColonyDevelopmentService(
         val colony = state.activeColony
         val tile = requireNotNull(colony.world.tileAt(coordinate))
         val cost = requireNotNull(preview.cost)
-        val inventory = spend(colony.inventory, cost.build, 0.0)
-        val nextTile = tile.copy(
-            development = TileDevelopment(
-                kind = DevelopmentKind.EXTRACT,
-                level = 1,
-                investedBuild = cost.build,
-            ),
-        )
+        val nextTile = tile.copy(development = TileDevelopment(DevelopmentKind.EXTRACT, 1, investedBuild = cost.build))
         return DevelopmentActionResult(
             true,
-            state.withActiveColony(colony.copy(inventory = inventory, world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)))),
+            state.withActiveColony(colony.copy(
+                inventory = spend(colony.inventory, cost.build, 0.0),
+                world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)),
+            )),
             "${ExtractionCompatibility.familyFor(requireNotNull(tile.deposit).resourceId).displayName} L1 developed.",
             cost = cost,
         )
@@ -175,8 +163,9 @@ class ColonyDevelopmentService(
         val build = jsRound(developBuildCost(colony, tile, deposit) * 1.60.pow(dev.level))
         val ore = extractionUpgradeOre(deposit.category, nextLevel)
         val cost = InfrastructureCost(build, ore)
-        val resourceReason = resourceShortage(colony.inventory, build, ore)
-        if (resourceReason != null) return DevelopmentPreview(false, resourceReason, cost = cost, nextLevel = nextLevel, workforce = extraWorkers)
+        resourceShortage(colony.inventory, build, ore)?.let {
+            return DevelopmentPreview(false, it, cost = cost, nextLevel = nextLevel, workforce = extraWorkers)
+        }
         return DevelopmentPreview(true, cost = cost, nextLevel = nextLevel, workforce = extraWorkers)
     }
 
@@ -187,13 +176,20 @@ class ColonyDevelopmentService(
         val tile = requireNotNull(colony.world.tileAt(coordinate))
         val dev = requireNotNull(tile.development)
         val cost = requireNotNull(preview.cost)
-        val inventory = spend(colony.inventory, cost.build, cost.ore)
         val nextTile = tile.copy(development = dev.copy(
             level = preview.nextLevel,
             investedBuild = dev.investedBuild + cost.build,
             investedOre = dev.investedOre + cost.ore,
         ))
-        return DevelopmentActionResult(true, state.withActiveColony(colony.copy(inventory = inventory, world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)))), "Extraction site upgraded to L${preview.nextLevel}.", cost = cost)
+        return DevelopmentActionResult(
+            true,
+            state.withActiveColony(colony.copy(
+                inventory = spend(colony.inventory, cost.build, cost.ore),
+                world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)),
+            )),
+            "Extraction site upgraded to L${preview.nextLevel}.",
+            cost = cost,
+        )
     }
 
     fun demolish(state: GameState, coordinate: SectorCoordinate): DevelopmentActionResult {
@@ -203,9 +199,13 @@ class ColonyDevelopmentService(
         val recoverBuild = floor(dev.investedBuild * InfrastructureRules.DEMOLITION_RECOVERY)
         val recoverOre = floor(dev.investedOre * InfrastructureRules.DEMOLITION_RECOVERY)
         var inventory = colony.inventory
-        if (recoverBuild > 0) inventory = inventory.store(ResourceId("fiber"), ResourceCategory.BUILD, recoverBuild, ResourceQuality.forBand(com.mineit.android.domain.resources.QualityBand.EXCELLENT).minimum)
-        if (recoverOre > 0) inventory = inventory.store(ResourceId("surface-iron"), ResourceCategory.ORE, recoverOre, ResourceQuality.forBand(com.mineit.android.domain.resources.QualityBand.EXCELLENT).minimum)
-        val depletedExtractor = dev.kind == DevelopmentKind.EXTRACT && (tile.resourceExhausted || tile.deposit?.renewableWiped == true || (tile.deposit?.reserve ?: 1L) <= 0L)
+        val excellentQuality = ResourceQuality.forBand(QualityBand.EXCELLENT).minimum
+        if (recoverBuild > 0) inventory = inventory.store(ResourceId("fiber"), ResourceCategory.BUILD, recoverBuild, excellentQuality)
+        if (recoverOre > 0) inventory = inventory.store(ResourceId("surface-iron"), ResourceCategory.ORE, recoverOre, excellentQuality)
+
+        val depletedExtractor = dev.kind == DevelopmentKind.EXTRACT && (
+            tile.resourceExhausted || tile.deposit?.renewableWiped == true || (tile.deposit?.reserve ?: 1L) <= 0L
+        )
         val nextTile = if (depletedExtractor) {
             tile.copy(
                 resourceExhausted = true,
@@ -227,12 +227,28 @@ class ColonyDevelopmentService(
             world = colony.world.copy(tiles = replaceTile(colony.world.tiles, nextTile)),
         ))
         next = headquartersService.synchronizePrimary(next)
-        return DevelopmentActionResult(true, next, "Development demolished; recovered ${recoverBuild.toInt()} Build and ${recoverOre.toInt()} Ore.", recoveredBuild = recoverBuild, recoveredOre = recoverOre)
+        return DevelopmentActionResult(
+            true,
+            next,
+            "Development demolished; recovered ${recoverBuild.toInt()} Build and ${recoverOre.toInt()} Ore.",
+            recoveredBuild = recoverBuild,
+            recoveredOre = recoverOre,
+        )
     }
 
-    fun installedHousing(colony: ColonyState): Double = colony.world.tiles.filter { it.development?.kind == DevelopmentKind.HOUSING }.sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
-    fun installedPower(colony: ColonyState): Double = colony.world.tiles.filter { it.development?.kind == DevelopmentKind.POWER && it.development.constructionComplete && !it.development.productionStopped }.sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
-    fun installedIndustry(colony: ColonyState): Double = (if (colony.foundingShipDocked) InfrastructureRules.FOUNDING_SHIP_INDUSTRY else 0.0) + colony.world.tiles.filter { it.development?.kind == DevelopmentKind.INDUSTRY && it.development.constructionComplete && !it.development.productionStopped }.sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
+    fun installedHousing(colony: ColonyState): Double = colony.world.tiles
+        .filter { it.development?.kind == DevelopmentKind.HOUSING }
+        .sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
+
+    fun installedPower(colony: ColonyState): Double = colony.world.tiles
+        .filter { it.development?.kind == DevelopmentKind.POWER && it.development.constructionComplete && !it.development.productionStopped }
+        .sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
+
+    fun installedIndustry(colony: ColonyState): Double =
+        (if (colony.foundingShipDocked) InfrastructureRules.FOUNDING_SHIP_INDUSTRY else 0.0) +
+            colony.world.tiles
+                .filter { it.development?.kind == DevelopmentKind.INDUSTRY && it.development.constructionComplete && !it.development.productionStopped }
+                .sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
 
     private fun commonBuildBlock(colony: ColonyState, tile: WorldTile): String? = when {
         colony.status == ColonyStatus.DEAD -> "This colony has been lost."
@@ -253,17 +269,18 @@ class ColonyDevelopmentService(
     private fun freeWorkforce(state: GameState): Double {
         val colony = state.activeColony
         val hqReserved = headquartersService.network(state, emptySet()).reservedStaff
-        val activeSiteWorkers = colony.world.tiles.filter { tile ->
-            tile.development?.kind == DevelopmentKind.EXTRACT && !tile.resourceExhausted && tile.deposit?.renewableWiped != true && !tile.development.productionStopped
-        }.sumOf { SiteOperationRules.workforceRequirement(colony, it) }
-        return max(0.0, headquartersService.baseWorkforceAvailable(colony) - hqReserved - activeSiteWorkers)
+        val siteWorkers = colony.world.tiles
+            .filter { it.development?.kind == DevelopmentKind.EXTRACT && !it.resourceExhausted && it.deposit?.renewableWiped != true && !it.development.productionStopped }
+            .sumOf { SiteOperationRules.workforceRequirement(colony, it) }
+        return max(0.0, headquartersService.baseWorkforceAvailable(colony) - hqReserved - siteWorkers)
     }
 
     private fun developBuildCost(colony: ColonyState, tile: WorldTile, deposit: ResourceDeposit): Double {
         val contractCost = colony.contract?.costMultiplier ?: 1.0
         val distance = 1.0 + hypot(tile.coordinate.x.toDouble(), tile.coordinate.y.toDouble()) * .012
-        val complexityIndex = deposit.requiredMiningLevel.coerceIn(1, MineItConfig.SITE_COMPLEXITY_COSTS.size) - 1
-        val complexity = .70 + .30 * MineItConfig.SITE_COMPLEXITY_COSTS[complexityIndex]
+        val complexity = .70 + .30 * MineItConfig.SITE_COMPLEXITY_COSTS[
+            deposit.requiredMiningLevel.coerceIn(1, MineItConfig.SITE_COMPLEXITY_COSTS.size) - 1
+        ]
         val size = if (deposit.sustainability == Sustainability.RENEWABLE) {
             when (deposit.abundanceLabel?.lowercase()) {
                 "limited" -> 1.12
@@ -292,12 +309,20 @@ class ColonyDevelopmentService(
     }
 
     private fun industryUpgradeRequirement(category: ResourceCategory, level: Int): Double {
-        val table = if (category == ResourceCategory.FOOD) listOf(0.0, 0.0, 100.0, 230.0, 420.0, 700.0) else listOf(0.0, 0.0, 150.0, 300.0, 550.0, 900.0)
+        val table = if (category == ResourceCategory.FOOD) {
+            listOf(0.0, 0.0, 100.0, 230.0, 420.0, 700.0)
+        } else {
+            listOf(0.0, 0.0, 150.0, 300.0, 550.0, 900.0)
+        }
         return table[level.coerceIn(1, 5)]
     }
 
     private fun extractionUpgradeOre(category: ResourceCategory, level: Int): Double {
-        val table = if (category == ResourceCategory.FOOD) listOf(0.0, 0.0, 5.0, 15.0, 35.0, 65.0) else listOf(0.0, 0.0, 10.0, 30.0, 70.0, 130.0)
+        val table = if (category == ResourceCategory.FOOD) {
+            listOf(0.0, 0.0, 5.0, 15.0, 35.0, 65.0)
+        } else {
+            listOf(0.0, 0.0, 10.0, 30.0, 70.0, 130.0)
+        }
         return table[level.coerceIn(1, 5)]
     }
 
@@ -322,9 +347,13 @@ class ColonyDevelopmentService(
         DevelopmentKind.EXTRACT -> "Extraction Site"
     }
 
-    private fun replaceTile(tiles: List<WorldTile>, updated: WorldTile): List<WorldTile> = tiles.map { if (it.coordinate == updated.coordinate) updated else it }
+    private fun replaceTile(tiles: List<WorldTile>, updated: WorldTile): List<WorldTile> =
+        tiles.map { if (it.coordinate == updated.coordinate) updated else it }
+
     private fun jsRound(value: Double): Double = floor(value + .5)
-    private fun GameState.withActiveColony(updated: ColonyState): GameState = copy(colonies = colonies.map { if (it.id == updated.id) updated else it })
+
+    private fun GameState.withActiveColony(updated: ColonyState): GameState =
+        copy(colonies = colonies.map { if (it.id == updated.id) updated else it })
 }
 
 data class DevelopmentPreview(
