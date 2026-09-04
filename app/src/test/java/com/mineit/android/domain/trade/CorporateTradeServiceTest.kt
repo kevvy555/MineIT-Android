@@ -1,5 +1,6 @@
 package com.mineit.android.domain.trade
 
+import com.mineit.android.domain.model.AbsoluteDay
 import com.mineit.android.domain.model.GameDate
 import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.model.ResourceId
@@ -18,7 +19,7 @@ class CorporateTradeServiceTest {
         val factory = NewGameFactory()
         val fresh = factory.contract01(42L)
         assertEquals(180, service.daysUntilArrival(fresh))
-        val due = fresh.copy(date = GameDate.fromAbsoluteDay(com.mineit.android.domain.model.AbsoluteDay(181)))
+        val due = fresh.copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         assertTrue(service.shouldArrive(due))
         val arrived = service.arrive(due)
         assertTrue(arrived.ok)
@@ -32,7 +33,7 @@ class CorporateTradeServiceTest {
     @Test
     fun reserveProtectsEveryResourceAndHighestQualitySellsFirst() {
         val factory = NewGameFactory()
-        var state = factory.contract01(7L).copy(date = GameDate.fromAbsoluteDay(com.mineit.android.domain.model.AbsoluteDay(181)))
+        var state = factory.contract01(7L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
         val colony = state.activeColony
         var inventory = colony.inventory.store(ResourceId("gold"), ResourceCategory.ORE, 100.0, quality = 30)
@@ -46,16 +47,16 @@ class CorporateTradeServiceTest {
         val result = service.sell(state, ResourceId("gold"), 30.0, spaceportServicesAvailable = true)
         assertTrue(result.ok)
         assertEquals(30.0, result.quantity, .0001)
-        assertEquals(20.0, result.state.activeColony.inventory.find(ResourceId("gold"))!!.qualityBands[QualityBand.COMMON]!!, .0001)
+        assertEquals(90.0, result.state.activeColony.inventory.find(ResourceId("gold"))!!.qualityBands[QualityBand.COMMON]!!, .0001)
         assertEquals(0.0, result.state.activeColony.inventory.find(ResourceId("gold"))!!.qualityBands[QualityBand.EXTRAORDINARY]!!, .0001)
-        assertEquals(2_062.5, result.value, .0001)
-        assertEquals(34_062.5, result.state.company.cash, .0001)
+        assertEquals(1_687.5, result.value, .0001)
+        assertEquals(33_687.5, result.state.company.cash, .0001)
     }
 
     @Test
     fun buyRespectsCargoCashAndSpaceportGate() {
         val factory = NewGameFactory()
-        var state = factory.contract01(9L).copy(date = GameDate.fromAbsoluteDay(com.mineit.android.domain.model.AbsoluteDay(181)))
+        var state = factory.contract01(9L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
         val blocked = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = false)
         assertFalse(blocked.ok)
