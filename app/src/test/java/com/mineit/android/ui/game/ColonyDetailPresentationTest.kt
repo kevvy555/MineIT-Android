@@ -32,7 +32,7 @@ class ColonyDetailPresentationTest {
                 industryLoad = 50.0,
                 industrySurvivalFactor = 1.0,
                 industryCommercialFactor = 1.0,
-                industryStaffFactor = .9,
+                industryStaffFactor = 1.0,
                 industryPowerFactor = 1.0,
             ),
             spaceport = spaceport(operational = true, powerFactor = 1.0),
