@@ -17,6 +17,7 @@ class FoundationModelTest {
         assertEquals(date, GameDate.fromAbsoluteDay(date.toAbsoluteDay()))
         assertEquals(1440, date.toAbsoluteDay().value)
         assertEquals(GameDate(year = 2, day = 1), GameDate.fromAbsoluteDay(AbsoluteDay(361)))
+        assertEquals(GameDate(year = 5, day = 1), date.nextDay())
     }
 
     @Test
