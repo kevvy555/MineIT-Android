@@ -46,14 +46,17 @@ data class TechnologyLevels(
 @Serializable
 data class CompanyState(
     val cash: Double,
-    val reputation: Int,
+    val reputation: Double,
     val earnedRevenue: Double = 0.0,
+    val wins: Int = 0,
+    val gameOver: Boolean = false,
     val technology: TechnologyLevels = TechnologyLevels(),
 ) {
     init {
         require(cash.isFinite()) { "Company cash must be finite." }
         require(earnedRevenue.isFinite()) { "Company earned revenue must be finite." }
-        require(reputation >= 0) { "Company reputation must not be negative." }
+        require(reputation.isFinite() && reputation in -100.0..100.0) { "Company reputation must be between -100 and 100." }
+        require(wins >= 0) { "Company wins must not be negative." }
     }
 }
 
@@ -63,6 +66,7 @@ enum class ColonyStatus {
     @SerialName("playing") PLAYING,
     @SerialName("holdover") HOLDOVER,
     @SerialName("liability") LIABILITY,
+    @SerialName("contract-failed") CONTRACT_FAILED,
     @SerialName("dead") DEAD,
 }
 
