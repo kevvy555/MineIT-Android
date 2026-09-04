@@ -8,7 +8,7 @@ object MineItConfig {
     const val DAYS_PER_YEAR = 360
     const val DAY_MS = 360L
     const val GRID_SIZE = 8
-    const val START_CASH = 32_000L
+    const val START_CASH = 32_000.0
     const val START_POPULATION = 120.0
     const val START_HOUSING = 180
     const val START_INDUSTRY_LEVEL = 1
@@ -16,6 +16,21 @@ object MineItConfig {
     const val START_BUILD = 520.0
     const val START_FUEL = 420.0
     const val START_ORE = 260.0
+
+    const val TRADE_INTERVAL_DAYS = 180
+    const val FIRST_TRADE_DAY = 181
+    const val CORPORATE_BUY_MARKUP = 1.5
+    const val RESOURCE_VALUE_SCALE = 5.0
+    const val TRADE_BASE_CARGO = 4_000.0
+    const val TRADE_CARGO_PER_REP = 250.0
+    const val TRADE_MAX_CARGO = 12_000.0
+    const val TRADE_BASE_EXPORT_CARGO = 100_000.0
+    const val TRADE_EXPORT_PER_REP = 10_000.0
+    const val TRADE_MAX_EXPORT_CARGO = 500_000.0
+    const val TRADE_PASSENGER_CAPACITY = 250
+    const val COLONIST_TRANSFER_COST = 250.0
+    const val INDUSTRY_PROCESSING_MAX_BONUS = .50
+    const val LOG_MAX_EVENTS = 10_000
 
     const val FOOD_PER_COLONIST = .12
     const val LIFE_SUPPORT_POWER_PER_COLONIST = .07

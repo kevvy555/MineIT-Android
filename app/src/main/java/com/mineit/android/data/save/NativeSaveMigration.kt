@@ -11,23 +11,31 @@ interface NativeSaveMigration {
 }
 
 object NativeSaveV1ToV2 : NativeSaveMigration {
-    override val fromVersion: Int = 1
-    override val toVersion: Int = 2
-    override fun migrate(input: JsonObject): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(toVersion)))
+    override val fromVersion = 1
+    override val toVersion = 2
+    override fun migrate(input: JsonObject) = bump(input, toVersion)
 }
 
 object NativeSaveV2ToV3 : NativeSaveMigration {
-    override val fromVersion: Int = 2
-    override val toVersion: Int = 3
-    override fun migrate(input: JsonObject): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(toVersion)))
+    override val fromVersion = 2
+    override val toVersion = 3
+    override fun migrate(input: JsonObject) = bump(input, toVersion)
 }
 
-/** Phase 4 adds development investment/resource-cover and Headquarters continuity state with defaults. */
 object NativeSaveV3ToV4 : NativeSaveMigration {
-    override val fromVersion: Int = 3
-    override val toVersion: Int = 4
-    override fun migrate(input: JsonObject): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(toVersion)))
+    override val fromVersion = 3
+    override val toVersion = 4
+    override fun migrate(input: JsonObject) = bump(input, toVersion)
 }
+
+/** Phase 6 adds trade/event/log state and contract commercial totals with semantic defaults. */
+object NativeSaveV4ToV5 : NativeSaveMigration {
+    override val fromVersion = 4
+    override val toVersion = 5
+    override fun migrate(input: JsonObject) = bump(input, toVersion)
+}
+
+private fun bump(input: JsonObject, version: Int): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(version)))
 
 class NativeSaveMigrationChain(
     private val currentVersion: Int = NativeSaveFormat.CURRENT_VERSION,
@@ -38,9 +46,7 @@ class NativeSaveMigrationChain(
     init {
         require(currentVersion >= 1) { "Current native save version must be at least 1." }
         require(migrationsBySource.size == migrations.size) { "Only one native save migration may start from each version." }
-        for (migration in migrations) {
-            require(migration.toVersion == migration.fromVersion + 1) { "Native save migrations must advance exactly one version at a time." }
-        }
+        migrations.forEach { require(it.toVersion == it.fromVersion + 1) { "Native save migrations must advance exactly one version at a time." } }
     }
 
     fun migrateToCurrent(input: JsonObject): JsonObject {
@@ -51,9 +57,7 @@ class NativeSaveMigrationChain(
             val migration = migrationsBySource[version] ?: error("No native save migration is registered from version $version.")
             current = migration.migrate(current)
             val migratedVersion = readVersion(current)
-            require(migratedVersion == migration.toVersion) {
-                "Native save migration ${migration.fromVersion}->${migration.toVersion} produced version $migratedVersion."
-            }
+            require(migratedVersion == migration.toVersion) { "Native save migration ${migration.fromVersion}->${migration.toVersion} produced version $migratedVersion." }
             version = migratedVersion
         }
         return current
@@ -69,6 +73,7 @@ class NativeSaveMigrationChain(
             if (currentVersion >= 2) add(NativeSaveV1ToV2)
             if (currentVersion >= 3) add(NativeSaveV2ToV3)
             if (currentVersion >= 4) add(NativeSaveV3ToV4)
+            if (currentVersion >= 5) add(NativeSaveV4ToV5)
         }
     }
 }

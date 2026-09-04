@@ -30,84 +30,29 @@ import com.mineit.android.ui.design.MineItStat
 import kotlin.math.roundToLong
 
 @Composable
-fun GameHeader(
-    state: GameState,
-    metrics: ColonyMetrics,
-    network: ColonyNetworkSnapshot,
-    spaceport: SpaceportStatus,
-    onOpenColonyDetail: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+fun GameHeader(state: GameState, metrics: ColonyMetrics, network: ColonyNetworkSnapshot, spaceport: SpaceportStatus, onOpenColonyDetail: () -> Unit, modifier: Modifier = Modifier) {
     val colony = state.activeColony
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = MineItSpacing.Sm),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Md),
-        ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = MineItSpacing.Sm), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Md)) {
             Column(Modifier.weight(1f)) {
                 Text("MINEIT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
-                Text(
-                    "${colony.contract?.name ?: "Contract 01"} • ${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MineItPalette.Muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Text("${colony.contract?.name ?: "Contract 01"} • ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text("£${state.company.cash}", style = MaterialTheme.typography.titleSmall, color = MineItPalette.Success)
+                Text("£${formatMoney(state.company.cash)}", style = MaterialTheme.typography.titleSmall, color = MineItPalette.Success)
                 Text("Y${state.date.year} D${state.date.day}", style = MaterialTheme.typography.labelMedium, color = MineItPalette.Muted)
             }
         }
-
         ResourceHud(state, metrics)
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
-        ) {
-            MineItStat(
-                label = "POWER",
-                value = "${format(metrics.powerFuelLimitedGeneration)}/${format(metrics.powerDemand)}",
-                stateColor = if (metrics.powerFactor >= .999) MineItPalette.Success else MineItPalette.Critical,
-                modifier = Modifier.weight(1f),
-            )
-            MineItStat(
-                label = "LIFE",
-                value = percent(metrics.lifeSupportPowerFactor),
-                stateColor = if (metrics.lifeSupportPowerFactor >= .999) MineItPalette.Success else MineItPalette.Critical,
-                modifier = Modifier.weight(1f),
-            )
-            MineItStat(
-                label = "INDUSTRY",
-                value = "${format(metrics.industry)}/${format(metrics.industryInstalled)}",
-                stateColor = if (metrics.industryPowerFactor >= .999) MineItPalette.Success else MineItPalette.Warning,
-                modifier = Modifier.weight(1f),
-            )
-            MineItStat(
-                label = "COMMAND",
-                value = "${format(network.headquarters.load)}/${format(network.headquarters.capacity)}",
-                stateColor = if (network.continuity.networkAvailable) MineItPalette.Success else MineItPalette.Critical,
-                modifier = Modifier.weight(1f),
-            )
-            Surface(
-                onClick = onOpenColonyDetail,
-                color = MineItPalette.Control,
-                shape = RoundedCornerShape(MineItRadius.Small),
-                border = BorderStroke(1.dp, MineItPalette.Line),
-                modifier = Modifier.weight(1f),
-            ) {
-                Column(
-                    Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+            MineItStat("POWER", "${format(metrics.powerFuelLimitedGeneration)}/${format(metrics.powerDemand)}", if (metrics.powerFactor >= .999) MineItPalette.Success else MineItPalette.Critical, Modifier.weight(1f))
+            MineItStat("LIFE", percent(metrics.lifeSupportPowerFactor), if (metrics.lifeSupportPowerFactor >= .999) MineItPalette.Success else MineItPalette.Critical, Modifier.weight(1f))
+            MineItStat("INDUSTRY", "${format(metrics.industry)}/${format(metrics.industryInstalled)}", if (metrics.industryPowerFactor >= .999) MineItPalette.Success else MineItPalette.Warning, Modifier.weight(1f))
+            MineItStat("COMMAND", "${format(network.headquarters.load)}/${format(network.headquarters.capacity)}", if (network.continuity.networkAvailable) MineItPalette.Success else MineItPalette.Critical, Modifier.weight(1f))
+            Surface(onClick = onOpenColonyDetail, color = MineItPalette.Control, shape = RoundedCornerShape(MineItRadius.Small), border = BorderStroke(1.dp, MineItPalette.Line), modifier = Modifier.weight(1f)) {
+                Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("COLONY", style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
-                    Text(
-                        if (spaceport.operational) "ONLINE" else "DETAILS",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (spaceport.operational) MineItPalette.Accent else MineItPalette.Warning,
-                    )
+                    Text(if (spaceport.operational) "ONLINE" else "DETAILS", style = MaterialTheme.typography.labelMedium, color = if (spaceport.operational) MineItPalette.Accent else MineItPalette.Warning)
                 }
             }
         }
@@ -117,38 +62,11 @@ fun GameHeader(
 @Composable
 private fun ResourceHud(state: GameState, metrics: ColonyMetrics) {
     val inventory = state.activeColony.inventory
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
-    ) {
-        MineItResourceCard(
-            label = "FOOD",
-            value = format(inventory.amountFor(ResourceCategory.FOOD)),
-            detail = supplyLabel(metrics.foodDays, metrics.foodProduction, metrics.foodDemand),
-            accent = MineItPalette.Food,
-            modifier = Modifier.weight(1f),
-        )
-        MineItResourceCard(
-            label = "BUILD",
-            value = format(inventory.amountFor(ResourceCategory.BUILD)),
-            detail = "+${format(metrics.buildProduction)}/d",
-            accent = MineItPalette.Build,
-            modifier = Modifier.weight(1f),
-        )
-        MineItResourceCard(
-            label = "FUEL",
-            value = format(inventory.amountFor(ResourceCategory.FUEL)),
-            detail = supplyLabel(metrics.fuelDays, metrics.fuelProduction, metrics.fuelDemand),
-            accent = MineItPalette.Fuel,
-            modifier = Modifier.weight(1f),
-        )
-        MineItResourceCard(
-            label = "ORE",
-            value = format(inventory.amountFor(ResourceCategory.ORE)),
-            detail = supplyLabel(metrics.oreDays, metrics.oreProduction, metrics.oreDemand),
-            accent = MineItPalette.Ore,
-            modifier = Modifier.weight(1f),
-        )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+        MineItResourceCard("FOOD", format(inventory.amountFor(ResourceCategory.FOOD)), supplyLabel(metrics.foodDays, metrics.foodProduction, metrics.foodDemand), MineItPalette.Food, Modifier.weight(1f))
+        MineItResourceCard("BUILD", format(inventory.amountFor(ResourceCategory.BUILD)), "+${format(metrics.buildProduction)}/d", MineItPalette.Build, Modifier.weight(1f))
+        MineItResourceCard("FUEL", format(inventory.amountFor(ResourceCategory.FUEL)), supplyLabel(metrics.fuelDays, metrics.fuelProduction, metrics.fuelDemand), MineItPalette.Fuel, Modifier.weight(1f))
+        MineItResourceCard("ORE", format(inventory.amountFor(ResourceCategory.ORE)), supplyLabel(metrics.oreDays, metrics.oreProduction, metrics.oreDemand), MineItPalette.Ore, Modifier.weight(1f))
     }
 }
 
@@ -161,10 +79,10 @@ private fun supplyLabel(days: Double?, production: Double, demand: Double): Stri
 }
 
 fun format(value: Double): String = when {
-    value >= 100_000 -> "%.1fk".format(value / 1000.0)
     value >= 1_000 -> "%.1fk".format(value / 1000.0)
     value % 1.0 == 0.0 -> value.roundToLong().toString()
     else -> "%.1f".format(value)
 }
 
+fun formatMoney(value: Double): String = if (value % 1.0 == 0.0) value.roundToLong().toString() else "%.2f".format(value)
 fun percent(value: Double): String = "${(value.coerceIn(0.0, 1.0) * 100).roundToLong()}%"

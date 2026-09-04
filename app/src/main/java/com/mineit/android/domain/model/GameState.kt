@@ -2,7 +2,10 @@ package com.mineit.android.domain.model
 
 import com.mineit.android.domain.colony.HeadquartersIdentityState
 import com.mineit.android.domain.contracts.ContractState
+import com.mineit.android.domain.events.CorporateEventQueueState
+import com.mineit.android.domain.logging.GameLogState
 import com.mineit.android.domain.resources.Inventory
+import com.mineit.android.domain.trade.TradeState
 import com.mineit.android.domain.world.WorldState
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -13,15 +16,13 @@ data class GameState(
     val company: CompanyState,
     val colonies: List<ColonyState>,
     val activeColonyId: ColonyId,
+    val corporateEvents: CorporateEventQueueState = CorporateEventQueueState(),
+    val gameLog: GameLogState = GameLogState(),
 ) {
     init {
         require(colonies.isNotEmpty()) { "GameState must contain at least one colony." }
-        require(colonies.map { it.id }.distinct().size == colonies.size) {
-            "GameState colony IDs must be unique."
-        }
-        require(colonies.any { it.id == activeColonyId }) {
-            "GameState activeColonyId must reference an existing colony."
-        }
+        require(colonies.map { it.id }.distinct().size == colonies.size) { "GameState colony IDs must be unique." }
+        require(colonies.any { it.id == activeColonyId }) { "GameState activeColonyId must reference an existing colony." }
     }
 
     val activeColony: ColonyState
@@ -38,19 +39,20 @@ data class TechnologyLevels(
     val scanning: Int = 1,
 ) {
     init {
-        require(listOf(housing, power, food, industry, mining, scanning).all { it >= 1 }) {
-            "Technology levels must be at least 1."
-        }
+        require(listOf(housing, power, food, industry, mining, scanning).all { it >= 1 }) { "Technology levels must be at least 1." }
     }
 }
 
 @Serializable
 data class CompanyState(
-    val cash: Long,
+    val cash: Double,
     val reputation: Int,
+    val earnedRevenue: Double = 0.0,
     val technology: TechnologyLevels = TechnologyLevels(),
 ) {
     init {
+        require(cash.isFinite()) { "Company cash must be finite." }
+        require(earnedRevenue.isFinite()) { "Company earned revenue must be finite." }
         require(reputation >= 0) { "Company reputation must not be negative." }
     }
 }
@@ -78,6 +80,8 @@ data class ColonyState(
     val emergencyMode: Boolean = false,
     val foodStarvationDays: Int = 0,
     val headquarters: HeadquartersIdentityState = HeadquartersIdentityState(),
+    val trade: TradeState = TradeState(),
+    val tradeReserve: Double = 0.0,
     /**
      * Durable staged ownership until the full ship domain is migrated. It represents the
      * canonical founding ship being physically docked at this colony and therefore able
@@ -90,8 +94,7 @@ data class ColonyState(
         require(name.isNotBlank()) { "Colony name must not be blank." }
         require(population.isFinite() && population >= 0.0) { "Colony population must not be negative." }
         require(foodStarvationDays >= 0) { "Food starvation days must not be negative." }
-        require(contract == null || contract.uid == id.value) {
-            "Colony contract uid must match the colony id."
-        }
+        require(tradeReserve.isFinite() && tradeReserve >= 0.0) { "Trade reserve must be finite and non-negative." }
+        require(contract == null || contract.uid == id.value) { "Colony contract uid must match the colony id." }
     }
 }

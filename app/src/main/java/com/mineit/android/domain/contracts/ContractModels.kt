@@ -57,6 +57,11 @@ data class ContractState(
     val bands: ContractBands,
     val startAbsoluteDay: Int = 1,
     val foundedAbsoluteDay: Int = 1,
+    val localRevenue: Double = 0.0,
+    val localCosts: Double = 0.0,
+    val renewals: Int = 0,
+    val pendingDecision: String? = null,
+    val pendingDecisionPreviousStatus: String? = null,
     val ended: Boolean = false,
     val completed: Boolean = false,
 )
