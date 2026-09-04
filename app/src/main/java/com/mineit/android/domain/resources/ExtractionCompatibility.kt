@@ -2,15 +2,15 @@ package com.mineit.android.domain.resources
 
 import com.mineit.android.domain.model.ResourceId
 
-enum class ExtractionFamily {
-    FARM,
-    RANCH,
-    BIO,
-    ALGAE,
-    QUARRY,
-    RIG,
-    MINE,
-    DEEP_MINE,
+enum class ExtractionFamily(val displayName: String) {
+    FARM("Farm"),
+    RANCH("Ranch"),
+    BIO("Bio Harvester"),
+    ALGAE("Algae Facility"),
+    QUARRY("Quarry"),
+    RIG("Rig"),
+    MINE("Mine"),
+    DEEP_MINE("Deep Mine"),
 }
 
 /**
