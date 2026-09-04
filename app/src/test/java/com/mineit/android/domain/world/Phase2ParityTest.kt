@@ -9,6 +9,7 @@ import com.mineit.android.domain.resources.ExtractionCompatibility
 import com.mineit.android.domain.resources.ExtractionFamily
 import com.mineit.android.domain.resources.ResourceCatalogue
 import com.mineit.android.domain.resources.ResourceCategory
+import com.mineit.android.domain.technology.ScanningTechnology
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -62,6 +63,16 @@ class Phase2ParityTest {
         assertEquals(ExtractionFamily.RIG, ExtractionCompatibility.familyFor(ResourceId("gas")))
         assertEquals(ExtractionFamily.DEEP_MINE, ExtractionCompatibility.familyFor(ResourceId("diamond")))
         assertEquals(ExtractionFamily.QUARRY, ExtractionCompatibility.familyFor(ResourceId("stone")))
+    }
+
+    @Test
+    fun `scanning technology uses current web slots and timing factors`() {
+        assertEquals(1, ScanningTechnology.forLevel(1).surveySlots)
+        assertEquals(1.0, ScanningTechnology.forLevel(1).scanTimeFactor, 0.0)
+        assertEquals(2, ScanningTechnology.forLevel(3).surveySlots)
+        assertEquals(0.95, ScanningTechnology.forLevel(3).scanTimeFactor, 0.0)
+        assertEquals(5, ScanningTechnology.forLevel(10).surveySlots)
+        assertEquals(0.775, ScanningTechnology.forLevel(10).scanTimeFactor, 0.0)
     }
 
     @Test
@@ -147,5 +158,34 @@ class Phase2ParityTest {
         assertTrue(survey.isResurveyable(world, coordinate, scanningLevel = 2))
         assertEquals(5, survey.days(contract, coordinate, resurvey = true))
         assertFalse(survey.surveyable(world, contract, SectorCoordinate(0, 0), scanningLevel = 2))
+    }
+
+    @Test
+    fun `aggregate survey service used by native UI reveals real Contract 01 resources`() {
+        val factory = NewGameFactory()
+        var state = factory.settleLandingSite(
+            factory.contract01(
+                colonySeed = 123456789,
+                colonyId = ColonyId("intro-123456789"),
+            ),
+            0,
+        )
+        val service = SurveyGameService()
+        val coordinate = SectorCoordinate(-2, -4)
+
+        assertEquals(9, service.surveyDays(state, coordinate))
+        state = service.enqueue(state, coordinate)
+        assertEquals(1, state.activeColony.world.activeSurveys.size)
+
+        repeat(9) {
+            val processed = service.processSurveys(state)
+            state = processed.state.copy(date = state.date.nextDay())
+        }
+
+        val revealed = state.activeColony.world.tileAt(coordinate)!!
+        assertEquals(10, state.date.day)
+        assertTrue(revealed.revealed)
+        assertEquals(ResourceId("nutrient"), revealed.deposit?.resourceId)
+        assertEquals(49, revealed.deposit?.quality)
     }
 }
