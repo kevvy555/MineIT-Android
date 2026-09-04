@@ -4,9 +4,12 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mineit.android.app.AppComposition
+import com.mineit.android.app.SimulationClock
 import com.mineit.android.app.persistence.PersistenceLoadResult
 import com.mineit.android.app.persistence.PersistenceSaveResult
 import com.mineit.android.domain.model.GameState
+import com.mineit.android.domain.simulation.ColonyMetrics
+import com.mineit.android.domain.simulation.DailySimulationResult
 import com.mineit.android.domain.world.SectorCoordinate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,8 +21,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val session = composition.gameSession
     private val newGameFactory = composition.newGameFactory
     private val surveyGameService = composition.surveyGameService
+    private val dailySimulationEngine = composition.dailySimulationEngine
 
     val state: StateFlow<GameState> = session.state
+
+    private val _metrics = MutableStateFlow(dailySimulationEngine.recalculate(state.value))
+    val metrics: StateFlow<ColonyMetrics> = _metrics.asStateFlow()
 
     private val _selectedSector = MutableStateFlow<SectorCoordinate?>(null)
     val selectedSector: StateFlow<SectorCoordinate?> = _selectedSector.asStateFlow()
@@ -27,11 +34,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
 
+    private val simulationClock = SimulationClock(
+        scope = viewModelScope,
+        advanceDay = { advanceSimulationDay(fromClock = true) },
+    )
+    val simulationSpeed: StateFlow<Int> = simulationClock.speed
+
     init {
+        simulationClock.start()
         viewModelScope.launch {
             when (val result = session.restoreFromPersistence()) {
-                PersistenceLoadResult.NotFound -> Unit
+                PersistenceLoadResult.NotFound -> {
+                    _metrics.value = dailySimulationEngine.recalculate(state.value)
+                }
                 is PersistenceLoadResult.Loaded -> {
+                    _metrics.value = dailySimulationEngine.recalculate(result.state)
                     _statusMessage.value = if (result.recoveredFromBackup) {
                         "Recovered the native save from the previous-good backup."
                     } else {
@@ -39,6 +56,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 is PersistenceLoadResult.Failure -> {
+                    _metrics.value = dailySimulationEngine.recalculate(state.value)
                     _statusMessage.value = "Save restore failed; using the fresh Contract 01 validation state."
                 }
             }
@@ -51,8 +69,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 newGameFactory.settleLandingSite(current, index)
             }
             _selectedSector.value = null
+            _metrics.value = dailySimulationEngine.recalculate(result.state)
             _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
-                "Landing Site ${index + 1} selected. The 8×8 surface grid is ready for surveying."
+                "Landing Site ${index + 1} selected. Daily survival simulation is now active."
             } else {
                 "Landing site selected, but the native save could not be written."
             }
@@ -83,25 +102,45 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /**
-     * Phase 2 validation control only: advances the canonical date and the real survey subsystem.
-     * Phase 3 replaces this partial day action with the complete daily simulation pipeline.
-     */
-    fun advanceSurveyDay() {
-        val snapshot = state.value
-        val world = snapshot.activeColony.world
-        if (world.activeSurveys.isEmpty() && world.surveyQueue.isEmpty()) return
+    fun advanceDay() {
+        viewModelScope.launch { advanceSimulationDay(fromClock = false) }
+    }
 
-        viewModelScope.launch {
-            val result = session.commit("phase2-survey-day") { current ->
-                val processed = surveyGameService.processSurveys(current)
-                processed.state.copy(date = current.date.nextDay())
-            }
-            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
-                "Survey progress advanced one game day. Economy/survival simulation remains intentionally inactive until Phase 3."
-            } else {
-                "Survey progress advanced, but the native save could not be written."
-            }
+    fun setSimulationSpeed(speed: Int) {
+        simulationClock.setSpeed(speed)
+        _statusMessage.value = if (speed == 0) "Simulation paused." else "Simulation running at ${speed}×."
+    }
+
+    private suspend fun advanceSimulationDay(fromClock: Boolean) {
+        if (!state.value.activeColony.world.settled) return
+        var simulationResult: DailySimulationResult? = null
+        val commit = session.commit(if (fromClock) "clock-day" else "advance-day") { current ->
+            dailySimulationEngine.advanceDay(current).also { simulationResult = it }.state
         }
+        val result = requireNotNull(simulationResult)
+        _metrics.value = result.metrics
+
+        if (commit.persistence is PersistenceSaveResult.Failure) {
+            _statusMessage.value = "Day advanced, but the native save could not be written."
+            return
+        }
+        _statusMessage.value = when {
+            result.colonyDied -> "COLONY LOST • population reached zero."
+            result.deaths > .0001 -> "Life-support shortage caused ${formatPopulation(result.deaths)} deaths this day."
+            result.completedSurveys.isNotEmpty() -> "Survey completed for ${result.completedSurveys.joinToString { "${it.x},${it.y}" }}."
+            !fromClock -> "Advanced one complete MineIT simulation day."
+            else -> null
+        }
+    }
+
+    private fun formatPopulation(value: Double): String = if (value % 1.0 == 0.0) {
+        value.toLong().toString()
+    } else {
+        "%.2f".format(value)
+    }
+
+    override fun onCleared() {
+        simulationClock.stop()
+        super.onCleared()
     }
 }
