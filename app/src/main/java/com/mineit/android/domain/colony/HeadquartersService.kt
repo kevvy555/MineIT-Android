@@ -3,9 +3,7 @@ package com.mineit.android.domain.colony
 import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.model.ColonyStatus
-import com.mineit.android.domain.model.GameDate
 import com.mineit.android.domain.model.GameState
-import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.SectorCoordinate
 import kotlin.math.floor
@@ -111,7 +109,7 @@ class HeadquartersService {
         val colony = state.activeColony
         val established = colony.headquarters.commandHandoverComplete
         val current = colony.headquarters.outage
-        val now = state.date.absoluteDay
+        val now = state.date.toAbsoluteDay().value
         var next = current
 
         when (current.phase) {
