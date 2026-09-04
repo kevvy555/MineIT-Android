@@ -1,12 +1,12 @@
 # MineIT Web-to-Native Android Migration Guide
 
-**Status:** Living migration plan — Phases 0–3 complete/accepted; Phase 4 implementation and regression exit gate complete, hands-on validation pending  
+**Status:** Living migration plan — Phases 0–5 complete/accepted; Phase 6 implementation and regression exit gate complete, hands-on validation pending  
 **Source application:** `kevvy555/MineIT` (`develop`)  
 **Source behavioural baseline:** commit `9e58983adaa7a15cd525451266ce9df3c17ae886`  
 **Source game version:** `5.13.15`  
 **Source save version:** `16`  
 **Target application:** `kevvy555/MineIT-Android`  
-**Current Android migration build:** `0.5.0-migration` / version code `9`  
+**Current Android migration build:** `0.7.0-migration` / version code `12`  
 **Canonical shared universe:** `kevvy555/MineIT-Universe`
 
 ## 1. Purpose
@@ -32,6 +32,8 @@ The following are part of the migration contract:
 - [`migration/PHASE_2_CORE_WORLD.md`](./migration/PHASE_2_CORE_WORLD.md) — current Contract 01 data, resource catalogue, deterministic world/discovery/survey implementation;
 - [`migration/PHASE_3_DAILY_SIMULATION.md`](./migration/PHASE_3_DAILY_SIMULATION.md) — accepted daily simulation/colony-survival implementation;
 - [`migration/PHASE_4_BUILDINGS_HEADQUARTERS.md`](./migration/PHASE_4_BUILDINGS_HEADQUARTERS.md) — current buildings, extraction sites, Power, Industry, Spaceport and Headquarters implementation;
+- [`migration/PHASE_5_NATIVE_UI.md`](./migration/PHASE_5_NATIVE_UI.md) — accepted production native UI/map and design-system foundation;
+- [`migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md`](./migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md) — current trade, contracts, buyers, commercial events and Game Log implementation;
 - [`migration/INTENTIONAL_DIVERGENCES.md`](./migration/INTENTIONAL_DIVERGENCES.md) — required log for deliberate semantic differences;
 - [`migration/RESOURCE_ARCHITECTURE_DIRECTION.md`](./migration/RESOURCE_ARCHITECTURE_DIRECTION.md) — resource architecture improvements allowed during migration without implementing the resource overhaul;
 - [`migration/DESIGN_SYSTEM_DIRECTION.md`](./migration/DESIGN_SYSTEM_DIRECTION.md) — MineIT-wide visual/interaction consistency workstream;
@@ -313,9 +315,10 @@ web v16 → native current
 native v1 → native v2
 native v2 → native v3
 native v3 → native v4
+native v4 → native v5
 ```
 
-Every real native migration gets fixture coverage. Phase 4 native save v4 adds durable development-investment/resource-cover and Headquarters continuity state, with explicit v3→v4 and cumulative migration coverage.
+Every real native migration gets fixture coverage. Phase 4 native save v4 added durable development-investment/resource-cover and Headquarters continuity state. Phase 6 native save v5 adds durable commercial/trade, buyer, contract-decision, corporate-event and Game Log state. Both migrations have direct and cumulative compatibility coverage, and v5 has non-default round-trip coverage.
 
 ## 10. MineIT-Universe build-time bundling
 
@@ -483,7 +486,7 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 - [x] daily simulation engine;
 - [x] speed/pause/`SimulationClock`;
 - [ ] deterministic simulation RNG state for later stochastic subsystems;
-- [ ] game log/telemetry.
+- [x] durable game log and native presentation.
 
 ### Resources/colony/infrastructure
 
@@ -505,9 +508,9 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 - [x] deterministic resource discovery;
 - [x] scanning/resurvey history rules;
 - [x] survey queue/timing domain rules;
-- [ ] production native map presentation;
-- [ ] camera/focus/filters;
-- [ ] tap/inspect/long-press/multi-select production UI.
+- [x] production native map presentation;
+- [x] camera/focus/filters;
+- [x] tap/inspect/long-press/multi-select production UI.
 
 ### Technology/progression
 
@@ -522,22 +525,22 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 ### Contracts/corporation
 
 - [x] Contract 01 canonical data/start-state foundation;
-- [ ] full contract service;
+- [x] full Contract 01 contract service;
 - [ ] portfolio/multi-colony lifecycle;
-- [ ] corporate event sequencing;
+- [x] corporate event sequencing;
 - [ ] colony creation/switch/removal/relocation;
-- [ ] deadlines/renewal/holdover/end states;
-- [ ] game-over;
-- [ ] reputation/cash/asset behaviour beyond foundation.
+- [x] Contract 01 deadlines/renewal/holdover/end states;
+- [ ] portfolio-wide game-over;
+- [x] Contract 01 commercial reputation/cash consequences.
 
 ### Trade/buyers
 
-- [ ] trade service;
-- [ ] buyer service/market definitions;
-- [ ] corporate ship events;
-- [ ] import/export capacity/reserves;
-- [ ] offers/contracts/collections;
-- [ ] relationship/miss/termination behaviour.
+- [x] Corporate Ship trade service;
+- [x] buyer service/market definitions;
+- [x] Corporate Ship events;
+- [x] import/export capacity/reserves;
+- [x] buyer offers/contracts/collections;
+- [x] relationship/miss/termination behaviour.
 
 ### Ships/expansion
 
@@ -545,7 +548,7 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 - [ ] ship market;
 - [ ] transport;
 - [ ] full founding-ship/fleet model (Phase 4 retains only the staged docked fact required by current colony rules);
-- [ ] passengers/accommodation;
+- [ ] passengers/accommodation beyond the Phase 6 Corporate Ship colonist-transfer flow;
 - [ ] cargo/current Fuel behaviour;
 - [ ] procurement;
 - [ ] location/travel state;
@@ -637,7 +640,7 @@ Exit gate: Android day progression matches representative Contract 01 survival/e
 
 Detailed record: [`migration/PHASE_3_DAILY_SIMULATION.md`](./migration/PHASE_3_DAILY_SIMULATION.md).
 
-### Phase 4 — Buildings, sites, Industry and Headquarters — IMPLEMENTED / FINAL VALIDATION
+### Phase 4 — Buildings, sites, Industry and Headquarters — COMPLETE / ACCEPTED
 
 - [x] placement/demolition;
 - [x] extraction development/upgrades;
@@ -651,42 +654,54 @@ Detailed record: [`migration/PHASE_3_DAILY_SIMULATION.md`](./migration/PHASE_3_D
 - [x] current construction/resource costs;
 - [x] native save v4 migration/round-trip coverage;
 - [x] Phase 4 Headquarters/Power regression exit gate and CI/signing checks;
-- [ ] `0.5.0-migration` hands-on device validation/acceptance.
+- [x] Phase 4 hands-on device validation completed before Phase 5 acceptance.
 
-Exit gate: Headquarters/Power regression scenarios pass natively. **Passed in CI; hands-on acceptance remains before promotion to `main`.**
+Exit gate: Headquarters/Power regression scenarios pass natively and the accepted implementation is part of the Phase 5/main baseline. **Passed.**
 
 Detailed record: [`migration/PHASE_4_BUILDINGS_HEADQUARTERS.md`](./migration/PHASE_4_BUILDINGS_HEADQUARTERS.md).
 
-### Phase 5 — Main native game UI/map and design-system foundation
+### Phase 5 — Main native game UI/map and design-system foundation — COMPLETE / ACCEPTED
 
-- [ ] production MineIT design tokens;
-- [ ] first reusable native primitives;
-- [ ] consistent resource/status header;
-- [ ] real 8×8 map tiles/art;
-- [ ] inspect/select/survey;
-- [ ] hold/drag multi-select;
-- [ ] queue/filter/focus presentation;
-- [ ] building/site panels;
-- [ ] colony/Power detail;
-- [ ] responsive phone layout;
-- [ ] previews/screenshot baselines;
-- [ ] accessibility/back/haptic conventions;
-- [ ] remove superseded `domain/poc` and POC UI source once production UI fully replaces it.
+- [x] production MineIT design tokens;
+- [x] first reusable native primitives;
+- [x] consistent resource/status header;
+- [x] real 8×8 map tiles/art;
+- [x] inspect/select/survey;
+- [x] hold/drag multi-select;
+- [x] queue/filter/focus presentation;
+- [x] building/site panels;
+- [x] colony/Power detail;
+- [x] responsive phone layout;
+- [x] previews/regression baselines where useful;
+- [x] accessibility/back/haptic conventions;
+- [x] superseded POC gameplay/presentation removed from production ownership;
+- [x] `0.6.0-migration` / version code 11 accepted on physical Android hardware;
+- [x] exact accepted Phase 5 head promoted to `main` before Phase 6.
 
-Exit gate: core first-colony gameplay is hands-on playable without POC/web UI and key concepts use one design language.
+Exit gate: core first-colony gameplay is hands-on playable without POC/web UI and key concepts use one design language. **Passed.**
 
-### Phase 6 — Trade, contracts and commercial events
+Detailed record: [`migration/PHASE_5_NATIVE_UI.md`](./migration/PHASE_5_NATIVE_UI.md).
 
-- [ ] trade ship arrival/departure;
-- [ ] buy/sell;
-- [ ] capacity/reserves;
-- [ ] contract goals/deadlines/decisions;
-- [ ] corporate event queue;
-- [ ] event pause/resume;
-- [ ] buyer offers/contracts/collections;
-- [ ] game log presentation.
+### Phase 6 — Trade, contracts and commercial events — IMPLEMENTED / FINAL VALIDATION
 
-Exit gate: Contract 01 commercial progression/resolution works natively.
+- [x] Corporate Ship arrival/departure;
+- [x] buy/sell;
+- [x] import/export capacity and reserves;
+- [x] Corporate Ship colonist transfer;
+- [x] Contract 01 goals/deadlines/decisions;
+- [x] corporate event queue and recovery;
+- [x] event pause/resume integration;
+- [x] buyer offers/contracts/recurring collections;
+- [x] buyer relationship/miss/termination outcomes;
+- [x] Game Log durable state and presentation;
+- [x] native save v5 migration and non-default round-trip coverage;
+- [x] `0.7.0-migration` implementation/regression/build/signing checkpoint green;
+- [ ] final documentation head full CI;
+- [ ] `0.7.0-migration` hands-on physical-device validation/acceptance.
+
+Exit gate: Contract 01 commercial progression/resolution works natively. **Passed in regression/CI at the implementation checkpoint; hands-on acceptance remains before promotion to `main`.**
+
+Detailed record: [`migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md`](./migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md).
 
 ### Phase 7 — Portfolio and multi-colony
 
@@ -915,21 +930,22 @@ Do not retire the web implementation as behavioural reference until:
 - [x] Phase 1 canonical state/`GameSession`/save/recovery/import foundation;
 - [x] Phase 2 Contract 01/current resource/deterministic world/discovery/survey implementation;
 - [x] Phase 3 colony survival/daily simulation, signed build and hands-on acceptance;
-- [x] accepted Phase 3 baseline promoted to `main` before Phase 4;
+- [x] Phase 4 buildings/sites/Power/Industry/Headquarters accepted before Phase 5;
+- [x] Phase 5 production native UI/map/design-system foundation accepted and promoted to `main`;
 - [x] resource overhaul remains deliberately deferred;
 - [x] design consistency and Universe bundling directions remain active migration workstreams.
 
 ### Current phase
 
-**Phase 4 — buildings, sites, Industry and Headquarters** has completed its implementation/regression exit gate on `feature/migration-phase-4`.
+**Phase 6 — trade, contracts and commercial events** has completed its implementation/regression/build/signing checkpoint on `feature/migration-phase-6`.
 
-The native domain now contains canonical local construction/extraction actions, current infrastructure costs, shared workforce/Industry/Power derivation, Basic Spaceport Power status, Headquarters Primary/staffing/capacity/load/efficiency, the one-time first-departure handover rule, emergency founding-ship command and A08b outage/recovery behavior. Native saves are v4. The `0.5.0-migration` signed APK is the final hands-on acceptance check before the exact accepted Phase 4 head is promoted to `main`.
+The native domain now contains canonical Corporate Ship trade, reserve/quality pricing, colonist transfer, Contract 01 deadline/decision lifecycle, buyer offers/contracts/recurring collection ships, relationship consequences, corporate-event ordering/recovery and durable Game Log ownership. `CommercialDayService` coordinates these systems after the canonical Phase 3 daily engine rather than creating a second simulation path. Native saves are v5. The `0.7.0-migration` signed APK is the remaining hands-on acceptance check after the final documentation head receives full CI.
 
-### Next milestone after Phase 4 acceptance
+### Next milestone after Phase 6 acceptance
 
-**Phase 5 — main native game UI/map and design-system foundation.**
+**Phase 7 — portfolio and multi-colony.**
 
-Phase 5 replaces the compact migration-validation surface with production MineIT Compose presentation while continuing to consume the Phase 0–4 canonical domain owners rather than moving gameplay into UI.
+Phase 7 will migrate portfolio ownership, colony switching, inactive-colony simulation/local state capture, cross-colony events and multi-colony lifecycle while preserving the Phase 0–6 canonical owners.
 
 ## 26. Reference notes
 
@@ -939,12 +955,14 @@ At the current migration baseline:
 - web save version: `16`;
 - source commit: `9e58983adaa7a15cd525451266ce9df3c17ae886`;
 - canonical calendar: 360 days/year;
-- current native save format: v4;
-- current Android build: `0.5.0-migration` / version code 9;
+- current native save format: v5;
+- current Android build: `0.7.0-migration` / version code 12;
 - current source resource catalogue: 40 definitions;
 - current Contract 01 uses eight deterministic 8×8 landing-site candidates;
-- native Phase 3 daily survival/simulation is accepted and is the current `main` baseline;
-- Phase 4 construction/Power/Spaceport/Headquarters implementation has passed its JVM/CI regression exit gate and awaits hands-on APK acceptance;
+- Phase 3 daily survival/simulation is accepted;
+- Phase 4 construction/Power/Spaceport/Headquarters is accepted;
+- Phase 5 production native UI/map/design system is accepted and is the current `main` baseline;
+- Phase 6 trade/contracts/buyers/commercial-events/Game Log implementation has passed its implementation CI checkpoint and awaits final documentation CI plus hands-on APK acceptance;
 - realistic web-save coverage includes multi-colony state, player-ship cargo/passengers/Fuel, engineering deployments, scan history and quality bands;
 - current web simulation includes Headquarters/Power behaviour implemented before the migration baseline;
 - the future resource-economy discovery remains separate from parity migration but informs permanent model shape;
