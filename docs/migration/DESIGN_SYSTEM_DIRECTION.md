@@ -106,3 +106,28 @@ As the production design system replaces the POC UI:
 - add screenshot baselines for representative states, not every trivial permutation;
 - test important enabled/disabled/warning/selected states;
 - keep gameplay assertions in domain tests rather than screenshot tests.
+
+## Phase 5 implementation status
+
+Phase 5 establishes the first production use of this direction rather than creating every future component up front.
+
+Implemented so far:
+
+- the web game's established dark industrial palette and semantic Food/Build/Fuel/Ore/Survey/warning/critical colours are native tokens;
+- repeated panels, resource/status presentation and primary/secondary action styling use shared Compose primitives;
+- the main menu and core colony screen share the same native design language;
+- the core colony screen is map-first, with compact status, map focus/filter controls, a context-action region and simulation footer;
+- normal map selection uses semantic tap handling while long-press/drag is reserved for multi-selection;
+- Android Back clears map context before leaving the game screen;
+- map selection includes accessibility semantics and long-press begins with sparse haptic feedback;
+- the Phase 1–4 domain/session owners remain authoritative beneath the production presentation;
+- current optimized MineIT art is rendered from the preserved bundled asset hierarchy through a presentation-only resolver/cache.
+
+Still deliberately incremental:
+
+- later feature screens should add new shared primitives only when genuine repetition appears;
+- representative screenshot baselines remain part of migration hardening rather than replacing domain/UI behaviour tests;
+- Power/HQ artwork is not invented during migration because the current source asset snapshot does not provide canonical art for those facilities;
+- a full visual consistency audit remains required after the remaining gameplay screens are migrated.
+
+Detailed implementation/recovery state is recorded in `PHASE_5_NATIVE_UI.md`.
