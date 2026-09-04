@@ -93,7 +93,7 @@ class DailySimulationEngine(
         if (colonyDied) {
             status = ColonyStatus.DEAD
             contract = contract?.copy(ended = true)
-            reputation = max(0, reputation - MineItConfig.COLONY_DEATH_REPUTATION_PENALTY)
+            reputation = max(0.0, reputation - MineItConfig.COLONY_DEATH_REPUTATION_PENALTY)
         }
 
         workingColony = workingColony.copy(
