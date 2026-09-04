@@ -11,13 +11,15 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val selectedCoordinate by viewModel.selectedSector.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
-    val selectedSector = state.activeColony.world.tileAt(selectedCoordinate ?: return@let null)
+    val selectedSector = selectedCoordinate?.let { state.activeColony.world.tileAt(it) }
+    val selectedSurveyDays = selectedCoordinate?.let(viewModel::surveyDays)
 
     MineItTheme {
         MineItScreen(
             state = state,
             selectedSector = selectedSector,
             selectedCoordinate = selectedCoordinate,
+            selectedSurveyDays = selectedSurveyDays,
             statusMessage = statusMessage,
             onSelectLandingSite = viewModel::selectLandingSite,
             onSelectSector = viewModel::selectSector,
