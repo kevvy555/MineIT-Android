@@ -17,6 +17,12 @@ object MineItConfig {
     const val START_FUEL = 420.0
     const val START_ORE = 260.0
 
+    const val MAX_CONTRACT_EXTENSIONS = 3
+    const val RENEWAL_YEARS = 5
+    const val HOLDOVER_COST_MULTIPLIER = 1.35
+    const val LIABILITY_COST_MULTIPLIER = 1.90
+    const val RETURN_MIN_RESOURCE_RATIO = .12
+
     const val TRADE_INTERVAL_DAYS = 180
     const val FIRST_TRADE_DAY = 181
     const val CORPORATE_BUY_MARKUP = 1.5
@@ -31,6 +37,11 @@ object MineItConfig {
     const val COLONIST_TRANSFER_COST = 250.0
     const val INDUSTRY_PROCESSING_MAX_BONUS = .50
     const val LOG_MAX_EVENTS = 10_000
+
+    const val BUYER_SHIPMENT_REPUTATION = .01
+    const val CORPORATE_EXPORT_REPUTATION = .01
+    const val CONTRACT_COMPLETION_REPUTATION = .10
+    val BUYER_COLLECTION_ATTEMPT_OFFSETS = listOf(0, 5, 10, 15)
 
     const val FOOD_PER_COLONIST = .12
     const val LIFE_SUPPORT_POWER_PER_COLONIST = .07
@@ -47,7 +58,7 @@ object MineItConfig {
     const val CRITICAL_MORTALITY_MIN = .0005
     const val CRITICAL_MORTALITY_MAX = .002
     const val COLLAPSE_MORTALITY_MAX = .03
-    const val COLONY_DEATH_REPUTATION_PENALTY = 2
+    const val COLONY_DEATH_REPUTATION_PENALTY = 2.0
 
     val SITE_OUTPUT_LEVELS = listOf(10.0, 18.0, 30.0, 48.0, 72.0, 105.0, 145.0, 195.0, 255.0, 330.0)
     val SITE_COMPLEXITY_COSTS = listOf(1.0, 1.3, 1.7, 2.3, 3.0, 4.0, 5.5, 7.0, 9.0, 12.0)
