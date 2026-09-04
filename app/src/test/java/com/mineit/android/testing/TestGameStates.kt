@@ -16,7 +16,7 @@ internal object TestGameStates {
 
     fun foundationState(
         cash: Long = 500_000,
-        population: Int = 120,
+        population: Double = 120.0,
         date: GameDate = GameDate(1, 1),
     ): GameState = GameState(
         date = date,
