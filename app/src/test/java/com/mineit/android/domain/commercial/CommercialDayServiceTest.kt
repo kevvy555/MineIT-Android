@@ -32,7 +32,7 @@ class CommercialDayServiceTest {
         assertEquals(1, result.state.corporateEvents.pending.count { it.type == CorporateEventType.SHIP })
         assertTrue(result.state.gameLog.events.any { it.type == "corporate-ship-arrival" })
 
-        val recovered = service.recoverBlockingEvents(result.state)
+        val recovered = service.recoverBlockingEvents(result.state, result.metrics)
         assertEquals(1, recovered.corporateEvents.pending.count { it.type == CorporateEventType.SHIP })
     }
 
@@ -48,7 +48,7 @@ class CommercialDayServiceTest {
         assertEquals("extension", result.state.activeColony.contract!!.pendingDecision)
         assertTrue(result.shouldPause)
 
-        val recovered = service.recoverBlockingEvents(result.state)
+        val recovered = service.recoverBlockingEvents(result.state, result.metrics)
         assertEquals(1, recovered.corporateEvents.pending.count { it.type == CorporateEventType.CONTRACT && it.kind == "extension" })
     }
 
