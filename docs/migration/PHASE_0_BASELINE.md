@@ -1,8 +1,10 @@
 # MineIT Android Migration — Phase 0 Baseline
 
 **Phase:** 0 — Baseline and migration harness  
-**Status:** In Progress  
-**Captured:** 4 September 2026
+**Status:** Complete  
+**Captured:** 4 September 2026  
+**Validated implementation head:** `46713177a031b5504a21cf27a5d7a301e08f7a26`  
+**Validation:** Android CI run `33847890980` — success
 
 ## Source baseline
 
@@ -109,12 +111,15 @@ The POC package must be removed once the first real playable native slice replac
 
 ## Phase 0 exit gate
 
-Phase 0 is complete when:
+Phase 0 is complete:
 
-- source baseline is recorded;
-- source domain/screen owners are inventoried;
-- web CI is explicitly retained as the behavioural reference;
-- at least one representative web-v16 fixture exists;
-- Android JVM tests can load and validate that fixture;
-- the intentional-divergence log exists;
-- temporary POC domain models no longer occupy production names.
+- [x] source baseline is recorded;
+- [x] source domain/screen owners are inventoried;
+- [x] web CI is explicitly retained as the behavioural reference;
+- [x] a representative web-v16 fixture exists;
+- [x] Android JVM tests load and validate that fixture;
+- [x] the intentional-divergence log exists;
+- [x] temporary POC domain models no longer occupy production names;
+- [x] Android CI passed unit tests, APK assembly, signer verification and artifact upload on the validated implementation head.
+
+Phase 1 may now build the production native state/persistence foundation on top of this harness.
