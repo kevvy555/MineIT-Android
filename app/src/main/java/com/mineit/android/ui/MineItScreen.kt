@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mineit.android.BuildConfig
 import com.mineit.android.domain.GameState
 import com.mineit.android.domain.Sector
 import com.mineit.android.domain.SectorCoordinate
@@ -57,7 +58,7 @@ fun MineItScreen(
                     Column {
                         Text("MINEIT", fontWeight = FontWeight.Black)
                         Text(
-                            text = "Native POC 0.1  •  Y${state.year} D${state.day}",
+                            text = "Native POC ${BuildConfig.VERSION_NAME}  •  Y${state.year} D${state.day}",
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
