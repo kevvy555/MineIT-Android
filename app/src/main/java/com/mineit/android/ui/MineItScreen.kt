@@ -19,6 +19,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import com.mineit.android.BuildConfig
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.resources.ResourceCategory
+import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.world.LandingSiteCandidate
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.domain.world.TerrainType
@@ -48,6 +50,8 @@ import kotlin.math.roundToLong
 @Composable
 fun MineItScreen(
     state: GameState,
+    metrics: ColonyMetrics,
+    simulationSpeed: Int,
     selectedSector: WorldTile?,
     selectedCoordinate: SectorCoordinate?,
     selectedSurveyDays: Int?,
@@ -55,7 +59,8 @@ fun MineItScreen(
     onSelectLandingSite: (Int) -> Unit,
     onSelectSector: (SectorCoordinate) -> Unit,
     onSurveySelectedSector: () -> Unit,
-    onAdvanceSurveyDay: () -> Unit,
+    onAdvanceDay: () -> Unit,
+    onSetSimulationSpeed: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colony = state.activeColony
@@ -85,7 +90,7 @@ fun MineItScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             ResourceStrip(state)
             ColonyStatus(state)
@@ -94,7 +99,7 @@ fun MineItScreen(
                 Text(
                     text = message,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
+                    color = if (metrics.lastDeaths > .0001) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
@@ -108,12 +113,15 @@ fun MineItScreen(
             } else {
                 SettledWorld(
                     state = state,
+                    metrics = metrics,
+                    simulationSpeed = simulationSpeed,
                     selectedSector = selectedSector,
                     selectedCoordinate = selectedCoordinate,
                     selectedSurveyDays = selectedSurveyDays,
                     onSelectSector = onSelectSector,
                     onSurveySelectedSector = onSurveySelectedSector,
-                    onAdvanceSurveyDay = onAdvanceSurveyDay,
+                    onAdvanceDay = onAdvanceDay,
+                    onSetSimulationSpeed = onSetSimulationSpeed,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -147,18 +155,8 @@ private fun ResourceTile(label: String, value: Double, modifier: Modifier = Modi
                 .padding(horizontal = 5.dp, vertical = 7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = label,
-                fontSize = 9.sp,
-                color = MaterialTheme.colorScheme.secondary,
-                maxLines = 1,
-            )
-            Text(
-                text = value.roundToLong().toString(),
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-            )
+            Text(label, fontSize = 9.sp, color = MaterialTheme.colorScheme.secondary, maxLines = 1)
+            Text(value.roundToLong().toString(), fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         }
     }
 }
@@ -179,22 +177,15 @@ private fun ColonyStatus(state: GameState) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(colony.name, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "${colony.contract?.name ?: "Contract 01"} • Population ${colony.population}",
+                    text = "${colony.contract?.name ?: "Contract 01"} • Population ${formatNumber(colony.population)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                     maxLines = 1,
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "£${state.company.cash}",
-                    color = MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    text = colony.status.name.replace('_', ' '),
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                Text("£${state.company.cash}", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Bold)
+                Text(colony.status.name.replace('_', ' '), style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -214,18 +205,14 @@ private fun LandingSiteSelection(
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "Real Contract 01 • choose one of 8 deterministic 8×8 terrain candidates",
+            text = "Contract 01 • choose one of 8 deterministic 8×8 terrain candidates",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.68f),
             modifier = Modifier.padding(bottom = 6.dp),
         )
-
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp)),
+            modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(12.dp)),
             contentPadding = PaddingValues(4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -239,26 +226,12 @@ private fun LandingSiteSelection(
 
 @Composable
 private fun LandingSiteCard(candidate: LandingSiteCandidate, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
+    Surface(onClick = onClick, shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text("SITE ${candidate.index + 1}", fontWeight = FontWeight.Bold)
-            Text(
-                text = "Plain ${candidate.counts[TerrainType.PLAIN] ?: 0} • Hill ${candidate.counts[TerrainType.HILL] ?: 0}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = "Mountain ${candidate.counts[TerrainType.MOUNTAIN] ?: 0} • Lake ${candidate.counts[TerrainType.LAKE] ?: 0}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            Text(
-                text = "Seed ${candidate.seed}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f),
-            )
+            Text("Plain ${candidate.counts[TerrainType.PLAIN] ?: 0} • Hill ${candidate.counts[TerrainType.HILL] ?: 0}", style = MaterialTheme.typography.bodySmall)
+            Text("Mountain ${candidate.counts[TerrainType.MOUNTAIN] ?: 0} • Lake ${candidate.counts[TerrainType.LAKE] ?: 0}", style = MaterialTheme.typography.bodySmall)
+            Text("Seed ${candidate.seed}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.58f))
         }
     }
 }
@@ -266,18 +239,23 @@ private fun LandingSiteCard(candidate: LandingSiteCandidate, onClick: () -> Unit
 @Composable
 private fun SettledWorld(
     state: GameState,
+    metrics: ColonyMetrics,
+    simulationSpeed: Int,
     selectedSector: WorldTile?,
     selectedCoordinate: SectorCoordinate?,
     selectedSurveyDays: Int?,
     onSelectSector: (SectorCoordinate) -> Unit,
     onSurveySelectedSector: () -> Unit,
-    onAdvanceSurveyDay: () -> Unit,
+    onAdvanceDay: () -> Unit,
+    onSetSimulationSpeed: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val world = state.activeColony.world
-    val hasSurveyWork = world.activeSurveys.isNotEmpty() || world.surveyQueue.isNotEmpty()
+    val colony = state.activeColony
+    val world = colony.world
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SimulationStatus(metrics, colony.foodStarvationDays)
+
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "SECTOR SURVEY • 8×8",
@@ -286,17 +264,8 @@ private fun SettledWorld(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = "${world.activeSurveys.size} active • ${world.surveyQueue.size} queued",
-                style = MaterialTheme.typography.labelSmall,
-            )
+            Text("${world.activeSurveys.size} active • ${world.surveyQueue.size} queued", style = MaterialTheme.typography.labelSmall)
         }
-
-        Text(
-            text = "Phase 2 validation: terrain, discovery and surveying are real; daily economy/survival begins in Phase 3.",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-        )
 
         SectorGrid(
             tiles = world.tiles,
@@ -309,36 +278,87 @@ private fun SettledWorld(
 
         SectorDetails(
             tile = selectedSector,
-            activeDaysRemaining = selectedSector?.coordinate?.let { coordinate ->
-                world.activeSurveys.firstOrNull { it.coordinate == coordinate }?.daysRemaining
-            },
+            activeDaysRemaining = selectedSector?.coordinate?.let { coordinate -> world.activeSurveys.firstOrNull { it.coordinate == coordinate }?.daysRemaining },
             queued = selectedSector?.coordinate?.let(world.surveyQueue::contains) == true,
         )
 
         Button(
             onClick = onSurveySelectedSector,
-            enabled = selectedSurveyDays != null,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp),
+            enabled = selectedSurveyDays != null && colony.status != ColonyStatus.DEAD,
+            modifier = Modifier.fillMaxWidth().height(40.dp),
         ) {
-            Text(
-                if (selectedSurveyDays != null) {
-                    "SURVEY SELECTED • $selectedSurveyDays DAYS"
-                } else {
-                    "SELECT A SURVEYABLE SECTOR"
-                },
-            )
+            Text(if (selectedSurveyDays != null) "SURVEY SELECTED • $selectedSurveyDays DAYS" else "SELECT A SURVEYABLE SECTOR")
         }
 
+        SimulationControls(
+            speed = simulationSpeed,
+            enabled = colony.status != ColonyStatus.DEAD,
+            onSetSpeed = onSetSimulationSpeed,
+            onAdvanceDay = onAdvanceDay,
+        )
+    }
+}
+
+@Composable
+private fun SimulationStatus(metrics: ColonyMetrics, starvationDays: Int) {
+    val lifePercent = (metrics.lifeSupportPowerFactor * 100).roundToLong()
+    val warning = metrics.lifeSupportPowerFactor < .7 || metrics.foodSupply < .7
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "POWER ${formatNumber(metrics.powerFuelLimitedGeneration)}/${formatNumber(metrics.powerDemand)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (metrics.lifeSupportPowerFactor < .7) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("Life support $lifePercent%", style = MaterialTheme.typography.labelSmall)
+            }
+            Text(
+                "Food ${formatNumber(metrics.foodProduction)}/${formatNumber(metrics.foodDemand)}/day • Fuel burn ${formatNumber(metrics.powerFuelBurn)} • Industry ${formatNumber(metrics.industry)}/${formatNumber(metrics.industryInstalled)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = .72f),
+                maxLines = 1,
+            )
+            Text(
+                "Workforce ${formatNumber(metrics.workforceAvailable)}/${formatNumber(metrics.workforceRequired)} • Starvation $starvationDays d${if (warning) " • SURVIVAL SHORTAGE" else ""}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = .72f),
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SimulationControls(
+    speed: Int,
+    enabled: Boolean,
+    onSetSpeed: (Int) -> Unit,
+    onAdvanceDay: () -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf(0 to "PAUSE", 1 to "1×", 2 to "2×", 4 to "4×").forEach { (value, label) ->
+            OutlinedButton(
+                onClick = { onSetSpeed(value) },
+                enabled = enabled,
+                modifier = Modifier.weight(1f).height(38.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp),
+            ) {
+                Text(if (speed == value) "• $label" else label, fontSize = 10.sp)
+            }
+        }
         Button(
-            onClick = onAdvanceSurveyDay,
-            enabled = hasSurveyWork,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp),
+            onClick = onAdvanceDay,
+            enabled = enabled && speed == 0,
+            modifier = Modifier.weight(1.35f).height(38.dp),
+            contentPadding = PaddingValues(horizontal = 2.dp),
         ) {
-            Text("ADVANCE SURVEY DAY")
+            Text("+1 DAY", fontSize = 10.sp)
         }
     }
 }
@@ -354,9 +374,7 @@ private fun SectorGrid(
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(8),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp)),
+        modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)),
         contentPadding = PaddingValues(4.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
@@ -410,77 +428,32 @@ private fun SectorCell(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${tile.coordinate.x},${tile.coordinate.y}",
-                    fontSize = 7.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                )
-                Text(
-                    text = terrainCode(tile.terrain),
-                    fontSize = 7.sp,
-                    color = if (selected) contentColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-                )
-                Text(
-                    text = status,
-                    fontSize = 8.sp,
-                    color = if (selected) contentColor else MaterialTheme.colorScheme.secondary,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                )
+                Text("${tile.coordinate.x},${tile.coordinate.y}", fontSize = 7.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                Text(status, fontSize = 7.sp, color = if (selected) contentColor else MaterialTheme.colorScheme.secondary, maxLines = 1)
             }
         }
     }
 }
 
 @Composable
-private fun SectorDetails(
-    tile: WorldTile?,
-    activeDaysRemaining: Double?,
-    queued: Boolean,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+private fun SectorDetails(tile: WorldTile?, activeDaysRemaining: Double?, queued: Boolean) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 7.dp)) {
             if (tile == null) {
-                Text("Tap a sector to inspect it", fontWeight = FontWeight.Bold)
-                Text(
-                    "Terrain is known from landing survey; geological resources are hidden until scanned.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Text("Tap a sector to inspect it", style = MaterialTheme.typography.bodyMedium)
                 return@Column
             }
-
-            Text(
-                text = "Sector ${tile.coordinate.x},${tile.coordinate.y} • ${terrainName(tile.terrain)}",
-                fontWeight = FontWeight.Bold,
-            )
-            val detail = when {
-                tile.coordinate.x == 0 && tile.coordinate.y == 0 -> "Founding ship tile • not surveyable"
-                activeDaysRemaining != null -> "Surveying • ${ceil(activeDaysRemaining).toInt()} days remaining"
-                queued -> "Queued for survey"
+            Text("Sector ${tile.coordinate.x},${tile.coordinate.y} • ${terrainName(tile.terrain)}", fontWeight = FontWeight.Bold)
+            val description = when {
+                activeDaysRemaining != null -> "Survey active • ${ceil(activeDaysRemaining).toInt()} days remaining"
+                queued -> "Survey queued"
                 !tile.revealed -> "Unsurveyed • geological reading unknown"
-                tile.deposit == null -> "Surveyed L${tile.lastScannedAtLevel} • clear reading"
-                else -> {
-                    val deposit = tile.deposit
-                    val scale = deposit.abundanceLabel ?: deposit.depositScale ?: "Deposit"
-                    val reserve = deposit.reserve?.let { " • Reserve $it" }.orEmpty()
-                    "${deposit.name} • ${deposit.category.name} • Quality ${deposit.quality} • $scale$reserve"
-                }
+                tile.deposit != null -> "${tile.deposit.name} • quality ${tile.deposit.quality} • ${tile.deposit.abundanceLabel ?: tile.deposit.depositScale ?: "deposit"}"
+                else -> "Surveyed L${tile.lastScannedAtLevel} • clear reading"
             }
-            Text(detail, style = MaterialTheme.typography.bodySmall)
+            Text(description, style = MaterialTheme.typography.bodySmall)
         }
     }
-}
-
-private fun terrainCode(terrain: TerrainType): String = when (terrain) {
-    TerrainType.PLAIN -> "PLN"
-    TerrainType.HILL -> "HIL"
-    TerrainType.MOUNTAIN -> "MTN"
-    TerrainType.LAKE -> "LAK"
 }
 
 private fun terrainName(terrain: TerrainType): String = when (terrain) {
@@ -488,4 +461,9 @@ private fun terrainName(terrain: TerrainType): String = when (terrain) {
     TerrainType.HILL -> "Hill"
     TerrainType.MOUNTAIN -> "Mountain"
     TerrainType.LAKE -> "Lake"
+}
+
+private fun formatNumber(value: Double): String {
+    val rounded = value.roundToLong()
+    return if (kotlin.math.abs(value - rounded) < .005) rounded.toString() else "%.1f".format(value)
 }
