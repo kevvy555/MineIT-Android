@@ -6,8 +6,8 @@
 **Completed:** 4 September 2026  
 **Source behavioural baseline:** `kevvy555/MineIT` commit `9e58983adaa7a15cd525451266ce9df3c17ae886`, game `5.13.15`, web save `16`  
 **Android branch:** `feature/migration-phase-1`  
-**Validated implementation head:** `71d60fa3799025452bcca15253d4535563f3bcda`  
-**Validation:** Android CI run `33850400762` — success
+**Final validated head:** `b6757ed2dbc523f6e2a93d6131be258470ad3470`  
+**Final validation:** Android CI run `33850648863` — success
 
 ## Source reviewed before implementation
 
@@ -49,9 +49,11 @@ Phase 1 introduces:
 - `ShipId`;
 - `ResourceId`;
 - `AbsoluteDay`;
-- `GameDate` with the existing 365-day MineIT year.
+- `GameDate`.
 
-These are used where cross-domain ID/unit confusion would create real defects; the migration does not wrap every primitive.
+Phase 2 source-parity review identified that Phase 1 had initially set `GameDate.DAYS_PER_YEAR` to 365 while the canonical web source uses **360**. Phase 2 corrected the permanent native calendar to 360 days and added regression coverage. The incorrect 365 value never represented an approved gameplay divergence.
+
+These types are used where cross-domain ID/unit confusion would create real defects; the migration does not wrap every primitive.
 
 ### Resource-safe inventory foundation
 
@@ -100,7 +102,7 @@ The game version is bumped to `0.2.0-migration`, Android version code `5`.
 
 Native save migrations are ordered one-version-at-a-time transformations. Future-version saves and missing migration steps fail explicitly.
 
-No fake production `v0 → v1` migration is included. Tests inject a test-only migration to prove the mechanism until a real native v2 exists.
+No fake production `v0 → v1` migration is included. Tests inject a test-only migration to prove the mechanism until a real native v2 exists. Phase 2 later introduced the first real production migration, `v1 → v2`.
 
 ### File persistence and recovery
 
@@ -201,9 +203,9 @@ Phase 1 is complete:
 - [x] explicit native migration chain exists;
 - [x] obvious transient UI/session state is excluded from the initial durable root;
 - [x] initial save/schema/source diagnostics exist;
-- [x] Android CI passed unit tests, APK assembly, signer verification and artifact upload on the implementation head;
+- [x] Android CI passed unit tests, APK assembly, signer verification and artifact upload on the final branch head;
 - [x] `0.2.0-migration` / version code `5` is configured with the existing persistent development signer.
 
 ## Next phase
 
-Phase 2 can now replace illustrative POC data with real MineIT Contract 01 definitions: typed configuration, current resource catalogue on the generic inventory foundation, seeded world/tile generation, survey discovery rules and parity fixtures. It should preserve the current resource economy while continuing to avoid the later resource-overhaul redesign.
+Phase 2 replaces illustrative domain data with real MineIT Contract 01 definitions: typed configuration, current resource catalogue on the generic inventory foundation, seeded world/tile generation, survey discovery rules and parity fixtures. It preserves the current resource economy while continuing to avoid the later resource-overhaul redesign.
