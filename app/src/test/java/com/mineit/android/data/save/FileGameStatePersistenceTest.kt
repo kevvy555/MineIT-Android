@@ -39,8 +39,8 @@ class FileGameStatePersistenceTest {
     fun `second save preserves the previous valid state as backup`() = withTempDirectory { directory ->
         var now = 1_000L
         val repository = repository(directory) { now }
-        val first = TestGameStates.foundationState(cash = 100)
-        val second = TestGameStates.foundationState(cash = 200, date = GameDate(1, 2))
+        val first = TestGameStates.foundationState(cash = 100.0)
+        val second = TestGameStates.foundationState(cash = 200.0, date = GameDate(1, 2))
 
         runBlocking { repository.save(first) }
         now = 2_000L
@@ -58,9 +58,9 @@ class FileGameStatePersistenceTest {
     @Test
     fun `fresh game reset discards previous run recovery history`() = withTempDirectory { directory ->
         val repository = repository(directory)
-        val first = TestGameStates.foundationState(cash = 100)
-        val second = TestGameStates.foundationState(cash = 200, date = GameDate(1, 2))
-        val fresh = TestGameStates.foundationState(cash = 32_000, date = GameDate(1, 1))
+        val first = TestGameStates.foundationState(cash = 100.0)
+        val second = TestGameStates.foundationState(cash = 200.0, date = GameDate(1, 2))
+        val fresh = TestGameStates.foundationState(cash = 32_000.0, date = GameDate(1, 1))
 
         runBlocking { repository.save(first) }
         runBlocking { repository.save(second) }
@@ -81,9 +81,9 @@ class FileGameStatePersistenceTest {
     @Test
     fun `corrupt active save never replaces an existing healthy backup`() = withTempDirectory { directory ->
         val repository = repository(directory)
-        val first = TestGameStates.foundationState(cash = 100)
-        val second = TestGameStates.foundationState(cash = 200)
-        val third = TestGameStates.foundationState(cash = 300)
+        val first = TestGameStates.foundationState(cash = 100.0)
+        val second = TestGameStates.foundationState(cash = 200.0)
+        val third = TestGameStates.foundationState(cash = 300.0)
 
         runBlocking { repository.save(first) }
         runBlocking { repository.save(second) }
