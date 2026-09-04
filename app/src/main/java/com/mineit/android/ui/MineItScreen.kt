@@ -36,16 +36,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mineit.android.BuildConfig
-import com.mineit.android.domain.GameState
-import com.mineit.android.domain.Sector
-import com.mineit.android.domain.SectorCoordinate
+import com.mineit.android.domain.poc.PocGameState
+import com.mineit.android.domain.poc.PocSector
+import com.mineit.android.domain.poc.PocSectorCoordinate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MineItScreen(
-    state: GameState,
-    selectedSector: Sector?,
-    onSelectSector: (SectorCoordinate) -> Unit,
+    state: PocGameState,
+    selectedSector: PocSector?,
+    onSelectSector: (PocSectorCoordinate) -> Unit,
     onAdvanceDay: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -108,7 +108,7 @@ fun MineItScreen(
 }
 
 @Composable
-private fun ResourceStrip(state: GameState) {
+private fun ResourceStrip(state: PocGameState) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -149,7 +149,7 @@ private fun ResourceTile(label: String, value: String, modifier: Modifier = Modi
 }
 
 @Composable
-private fun ColonyStatus(state: GameState) {
+private fun ColonyStatus(state: PocGameState) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -186,9 +186,9 @@ private fun ColonyStatus(state: GameState) {
 
 @Composable
 private fun SectorGrid(
-    sectors: List<Sector>,
-    selectedSector: Sector?,
-    onSelectSector: (SectorCoordinate) -> Unit,
+    sectors: List<PocSector>,
+    selectedSector: PocSector?,
+    onSelectSector: (PocSectorCoordinate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalGrid(
@@ -216,7 +216,7 @@ private fun SectorGrid(
 
 @Composable
 private fun SectorCell(
-    sector: Sector,
+    sector: PocSector,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -258,7 +258,7 @@ private fun SectorCell(
 }
 
 @Composable
-private fun SectorDetails(selectedSector: Sector?) {
+private fun SectorDetails(selectedSector: PocSector?) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
