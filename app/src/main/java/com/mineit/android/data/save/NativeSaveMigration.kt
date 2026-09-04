@@ -13,24 +13,20 @@ interface NativeSaveMigration {
 object NativeSaveV1ToV2 : NativeSaveMigration {
     override val fromVersion: Int = 1
     override val toVersion: Int = 2
-
-    override fun migrate(input: JsonObject): JsonObject = JsonObject(
-        input + ("formatVersion" to JsonPrimitive(toVersion)),
-    )
+    override fun migrate(input: JsonObject): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(toVersion)))
 }
 
-/**
- * Phase 3 adds durable survival/development fields with semantic defaults and changes population
- * to a fractional-safe numeric model. JSON integer population values remain valid doubles, so the
- * ordered migration only advances the envelope version and lets serialization apply the defaults.
- */
 object NativeSaveV2ToV3 : NativeSaveMigration {
     override val fromVersion: Int = 2
     override val toVersion: Int = 3
+    override fun migrate(input: JsonObject): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(toVersion)))
+}
 
-    override fun migrate(input: JsonObject): JsonObject = JsonObject(
-        input + ("formatVersion" to JsonPrimitive(toVersion)),
-    )
+/** Phase 4 adds development investment/resource-cover and Headquarters continuity state with defaults. */
+object NativeSaveV3ToV4 : NativeSaveMigration {
+    override val fromVersion: Int = 3
+    override val toVersion: Int = 4
+    override fun migrate(input: JsonObject): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(toVersion)))
 }
 
 class NativeSaveMigrationChain(
@@ -41,26 +37,18 @@ class NativeSaveMigrationChain(
 
     init {
         require(currentVersion >= 1) { "Current native save version must be at least 1." }
-        require(migrationsBySource.size == migrations.size) {
-            "Only one native save migration may start from each version."
-        }
+        require(migrationsBySource.size == migrations.size) { "Only one native save migration may start from each version." }
         for (migration in migrations) {
-            require(migration.toVersion == migration.fromVersion + 1) {
-                "Native save migrations must advance exactly one version at a time."
-            }
+            require(migration.toVersion == migration.fromVersion + 1) { "Native save migrations must advance exactly one version at a time." }
         }
     }
 
     fun migrateToCurrent(input: JsonObject): JsonObject {
         var current = input
         var version = readVersion(current)
-        require(version <= currentVersion) {
-            "Native save version $version is newer than supported version $currentVersion."
-        }
-
+        require(version <= currentVersion) { "Native save version $version is newer than supported version $currentVersion." }
         while (version < currentVersion) {
-            val migration = migrationsBySource[version]
-                ?: error("No native save migration is registered from version $version.")
+            val migration = migrationsBySource[version] ?: error("No native save migration is registered from version $version.")
             current = migration.migrate(current)
             val migratedVersion = readVersion(current)
             require(migratedVersion == migration.toVersion) {
@@ -68,21 +56,19 @@ class NativeSaveMigrationChain(
             }
             version = migratedVersion
         }
-
         return current
     }
 
     private fun readVersion(root: JsonObject): Int {
-        val raw = root["formatVersion"]?.jsonPrimitive?.content
-            ?: error("Native save is missing formatVersion.")
-        return raw.toIntOrNull()
-            ?: error("Native save formatVersion must be an integer.")
+        val raw = root["formatVersion"]?.jsonPrimitive?.content ?: error("Native save is missing formatVersion.")
+        return raw.toIntOrNull() ?: error("Native save formatVersion must be an integer.")
     }
 
     companion object {
         private fun defaultMigrations(currentVersion: Int): List<NativeSaveMigration> = buildList {
             if (currentVersion >= 2) add(NativeSaveV1ToV2)
             if (currentVersion >= 3) add(NativeSaveV2ToV3)
+            if (currentVersion >= 4) add(NativeSaveV3ToV4)
         }
     }
 }
