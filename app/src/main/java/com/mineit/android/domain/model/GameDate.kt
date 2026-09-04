@@ -15,7 +15,8 @@ data class GameDate(
     fun toAbsoluteDay(): AbsoluteDay = AbsoluteDay((year - 1) * DAYS_PER_YEAR + day)
 
     companion object {
-        const val DAYS_PER_YEAR = 365
+        /** Canonical MineIT calendar from the web behavioural baseline. */
+        const val DAYS_PER_YEAR = 360
 
         fun fromAbsoluteDay(absoluteDay: AbsoluteDay): GameDate {
             val zeroBased = absoluteDay.value - 1
