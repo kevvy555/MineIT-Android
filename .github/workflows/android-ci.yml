@@ -50,10 +50,13 @@ jobs:
       - name: Run unit tests and build debug APK
         run: gradle testDebugUnitTest assembleDebug --stacktrace
 
-      - name: Report APK signer
+      - name: Verify persistent development signer
         shell: bash
         run: |
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+          expected="fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c"
+          actual="$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1)"
+          echo "APK signer SHA-256: $actual"
+          test "$actual" = "$expected"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
