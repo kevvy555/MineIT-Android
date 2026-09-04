@@ -14,6 +14,7 @@ fun CorporateEventDialog(
     onPrimary: () -> Unit,
     onSecondary: () -> Unit,
 ) {
+    val attemptIndex = event.attemptIndex ?: 0
     val title = when (event.type) {
         CorporateEventType.EMERGENCY_FOOD -> "EMERGENCY FOOD"
         CorporateEventType.BUYER -> "BUYER COLLECTION"
@@ -23,7 +24,7 @@ fun CorporateEventDialog(
     val message = when (event.type) {
         CorporateEventType.EMERGENCY_FOOD -> "${event.colonyName} requires emergency attention."
         CorporateEventType.SHIP -> "The Conglomerate corporate ship has arrived at ${event.colonyName}. Trade, cargo and passenger services are available while Spaceport services remain powered."
-        CorporateEventType.BUYER -> "A contracted buyer ship is ready at ${event.colonyName}. Attempt ${event.attemptIndex + 1} of 4. Resolve the shipment or ask the buyer to wait."
+        CorporateEventType.BUYER -> "A contracted buyer ship is ready at ${event.colonyName}. Attempt ${attemptIndex + 1} of 4. Resolve the shipment or ask the buyer to wait."
         CorporateEventType.CONTRACT -> when (event.kind) {
             "complete" -> "${event.colonyName} has reached its Contract goals at the deadline. Complete the contract and enter holdover."
             "extension" -> "${event.colonyName} missed its Contract goals. Purchase the next one-year extension to continue."
@@ -46,7 +47,7 @@ fun CorporateEventDialog(
         CorporateEventType.EMERGENCY_FOOD -> "ACKNOWLEDGE"
     }
     val secondary = when (event.type) {
-        CorporateEventType.BUYER -> if (event.attemptIndex >= 3) "MISS SHIPMENT" else "WAIT"
+        CorporateEventType.BUYER -> if (attemptIndex >= 3) "MISS SHIPMENT" else "WAIT"
         CorporateEventType.CONTRACT -> when (event.kind) {
             "renewal-ended" -> "RENEW +5 YEARS"
             "complete" -> "LATER"
