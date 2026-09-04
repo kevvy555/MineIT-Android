@@ -61,7 +61,20 @@ class FileGameStatePersistence(
         )
     }
 
-    override suspend fun save(state: GameState): PersistenceSaveResult = withContext(dispatcher) {
+    override suspend fun save(state: GameState): PersistenceSaveResult = persist(
+        state = state,
+        preservePreviousAsBackup = true,
+    )
+
+    override suspend fun reset(state: GameState): PersistenceSaveResult = persist(
+        state = state,
+        preservePreviousAsBackup = false,
+    )
+
+    private suspend fun persist(
+        state: GameState,
+        preservePreviousAsBackup: Boolean,
+    ): PersistenceSaveResult = withContext(dispatcher) {
         try {
             ensureDirectory()
             cleanTempFiles()
@@ -79,13 +92,17 @@ class FileGameStatePersistence(
             writeSynced(saveTempFile, raw)
             codec.decode(saveTempFile.readText(StandardCharsets.UTF_8))
 
-            if (activeFile.exists()) {
+            if (preservePreviousAsBackup && activeFile.exists()) {
                 val currentActiveRaw = activeFile.readText(StandardCharsets.UTF_8)
                 val currentActiveIsValid = runCatching { codec.decode(currentActiveRaw) }.isSuccess
                 if (currentActiveIsValid) {
                     writeSynced(backupTempFile, currentActiveRaw)
                     codec.decode(backupTempFile.readText(StandardCharsets.UTF_8))
                     moveReplace(backupTempFile, backupFile)
+                }
+            } else if (!preservePreviousAsBackup) {
+                require(!backupFile.exists() || backupFile.delete()) {
+                    "Unable to remove previous-game native save backup."
                 }
             }
 
