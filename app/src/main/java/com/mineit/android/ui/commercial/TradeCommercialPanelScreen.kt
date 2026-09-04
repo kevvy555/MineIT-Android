@@ -75,8 +75,8 @@ fun TradeCommercialPanelScreen(
     val colony = state.activeColony
     val trade = colony.trade
     var modeName by rememberSaveable { mutableStateOf(TradeMode.SELL.name) }
-    var amount by rememberSaveable { mutableStateOf(100.0) }
-    var buyCategoryName by rememberSaveable { mutableStateOf("ALL") }
+    var amount by rememberSaveable { mutableStateOf(10_000.0) }
+    var buyCategoryName by rememberSaveable { mutableStateOf("FUEL") }
     var buyPage by rememberSaveable { mutableStateOf(0) }
     var sellPage by rememberSaveable { mutableStateOf(0) }
     var colonists by rememberSaveable { mutableStateOf(1) }
@@ -93,7 +93,7 @@ fun TradeCommercialPanelScreen(
                 horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
             ) {
                 Text(
-                    "COMMERCIAL OPERATIONS",
+                    "CORPORATE TRADE SHIP",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleMedium,
                     color = MineItPalette.Accent,
