@@ -38,7 +38,7 @@ class Phase2ParityTest {
         val colony = state.activeColony
         val contract = requireNotNull(colony.contract)
 
-        assertEquals(32_000L, state.company.cash)
+        assertEquals(32_000.0, state.company.cash, 0.0)
         assertEquals(120.0, colony.population, 0.0)
         assertEquals(ColonyStatus.SITE_SELECTION, colony.status)
         assertEquals("Koplin Mining Charter — Contract 01", contract.name)
