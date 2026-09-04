@@ -58,7 +58,7 @@ fun MineItScreen(
                     Column {
                         Text("MINEIT", fontWeight = FontWeight.Black)
                         Text(
-                            text = "Native POC ${BuildConfig.VERSION_NAME}  •  Y${state.year} D${state.day}",
+                            text = "Android Migration ${BuildConfig.VERSION_NAME}  •  Y${state.year} D${state.day}",
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
