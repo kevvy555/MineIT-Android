@@ -135,7 +135,7 @@ class NativeSaveMigrationCompatibilityTest {
     }
 
     @Test
-    fun `phase 4 save migrates to v5 with semantic commercial defaults`() {
+    fun `phase 4 save migrates through v6 with semantic commercial and fleet defaults`() {
         val phase4Save = """
             {
               "formatVersion":4,
@@ -160,7 +160,7 @@ class NativeSaveMigrationCompatibilityTest {
 
         val migrated = SaveCodec().decode(phase4Save)
 
-        assertEquals(5, migrated.formatVersion)
+        assertEquals(NativeSaveFormat.CURRENT_VERSION, migrated.formatVersion)
         assertEquals(2.5, migrated.state.company.reputation, 0.0)
         assertEquals(0, migrated.state.company.wins)
         assertFalse(migrated.state.company.gameOver)
@@ -169,10 +169,12 @@ class NativeSaveMigrationCompatibilityTest {
         assertEquals(0.0, migrated.state.activeColony.tradeReserve, 0.0)
         assertEquals(CorporateEventQueueState(), migrated.state.corporateEvents)
         assertEquals(GameLogState(), migrated.state.gameLog)
+        assertTrue(migrated.state.fleet.ships.isEmpty())
+        assertEquals(120.0, migrated.state.activeColony.planetaryAccommodationResidents, 0.0)
     }
 
     @Test
-    fun `phase 6 commercial state and Phase 4 infrastructure round trip exactly in v5`() {
+    fun `phase 6 commercial fleet state and Phase 4 infrastructure round trip exactly in v6`() {
         val factory = NewGameFactory()
         var state = factory.settleLandingSite(
             factory.contract01(
@@ -309,7 +311,7 @@ class NativeSaveMigrationCompatibilityTest {
         )
         val envelope = SaveEnvelope(
             formatVersion = NativeSaveFormat.CURRENT_VERSION,
-            gameVersion = "0.7.0-migration",
+            gameVersion = "0.7.1-migration",
             savedAtEpochMillis = 999999,
             state = state,
         )

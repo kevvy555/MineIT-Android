@@ -1,7 +1,5 @@
 package com.mineit.android.domain.simulation
 
-import com.mineit.android.domain.model.ColonyId
-import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.Inventory
 import com.mineit.android.domain.resources.QualityBand
@@ -12,6 +10,7 @@ import com.mineit.android.domain.world.ResourceDeposit
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.domain.world.Sustainability
 import com.mineit.android.domain.world.TileDevelopment
+import com.mineit.android.testing.EstablishedColonyFixture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,7 +26,7 @@ class Phase3SimulationTest {
 
         assertEquals(14.4, before.foodDemand, 1e-9)
         assertEquals(0.0, before.powerCapacity, 1e-9)
-        assertEquals(30.9, before.powerDemand, 1e-9)
+        assertEquals(18.4, before.powerDemand, 1e-9)
         assertEquals(50.0, before.industryInstalled, 1e-9)
         assertEquals(1.0, before.oreDemand, 1e-9)
         assertEquals(90.27777777777777, before.foodDays ?: -1.0, 1e-9)
@@ -56,7 +55,7 @@ class Phase3SimulationTest {
 
         assertEquals(120.0, result.state.activeColony.population, 1e-9)
         assertEquals(0.0, result.deaths, 1e-9)
-        assertEquals(412.5, result.state.activeColony.inventory.amountFor(ResourceCategory.FUEL), 1e-9)
+        assertEquals(667.5, result.state.activeColony.inventory.amountFor(ResourceCategory.FUEL), 1e-9)
         assertEquals(259.0, result.state.activeColony.inventory.amountFor(ResourceCategory.ORE), 1e-9)
         assertEquals(7.5, result.metrics.powerFuelConsumed, 1e-9)
     }
@@ -162,15 +161,7 @@ class Phase3SimulationTest {
         assertTrue(state.activeColony.inventory.amountFor(ResourceCategory.ORE) >= 0.0)
     }
 
-    private fun settledState() = NewGameFactory().let { factory ->
-        factory.settleLandingSite(
-            factory.contract01(
-                colonySeed = 123456789,
-                colonyId = ColonyId("intro-123456789"),
-            ),
-            0,
-        )
-    }
+    private fun settledState() = EstablishedColonyFixture.contract01()
 
     private fun withPowerPlant(state: com.mineit.android.domain.model.GameState): com.mineit.android.domain.model.GameState =
         updateTile(state, SectorCoordinate(1, 0)) { tile ->

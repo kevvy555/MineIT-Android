@@ -30,13 +30,14 @@ class Phase2ParityTest {
     }
 
     @Test
-    fun `Contract 01 uses current web starter data and generic inventory`() {
+    fun `Contract 01 uses current web N05 starter manifest and generic inventories`() {
         val state = NewGameFactory().contract01(
             colonySeed = 123456789,
             colonyId = ColonyId("intro-123456789"),
         )
         val colony = state.activeColony
         val contract = requireNotNull(colony.contract)
+        val ship = state.fleet.ships.single()
 
         assertEquals(32_000.0, state.company.cash, 0.0)
         assertEquals(120.0, colony.population, 0.0)
@@ -46,10 +47,17 @@ class Phase2ParityTest {
         assertEquals(120, contract.goals.food)
         assertEquals(520, contract.goals.industry)
         assertEquals(1_050, contract.goals.population)
-        assertEquals(1_300.0, colony.inventory.amountFor(ResourceCategory.FOOD), 0.0)
-        assertEquals(520.0, colony.inventory.amountFor(ResourceCategory.BUILD), 0.0)
-        assertEquals(420.0, colony.inventory.amountFor(ResourceCategory.FUEL), 0.0)
-        assertEquals(260.0, colony.inventory.amountFor(ResourceCategory.ORE), 0.0)
+        assertEquals(0.0, colony.inventory.amountFor(ResourceCategory.FOOD), 0.0)
+        assertEquals(0.0, colony.inventory.amountFor(ResourceCategory.BUILD), 0.0)
+        assertEquals(0.0, colony.inventory.amountFor(ResourceCategory.FUEL), 0.0)
+        assertEquals(0.0, colony.inventory.amountFor(ResourceCategory.ORE), 0.0)
+        assertEquals(1_300.0, ship.inventory.amountFor(ResourceCategory.FOOD), 0.0)
+        assertEquals(520.0, ship.inventory.amountFor(ResourceCategory.BUILD), 0.0)
+        assertEquals(675.0, ship.inventory.amountFor(ResourceCategory.FUEL), 0.0)
+        assertEquals(260.0, ship.inventory.amountFor(ResourceCategory.ORE), 0.0)
+        assertEquals(10, ship.crew)
+        assertEquals(120.0, colony.shipResidentAssignments.single().residents, 0.0)
+        assertEquals(0.0, colony.planetaryAccommodationResidents, 0.0)
         assertEquals(8, colony.world.landingCandidates.size)
     }
 

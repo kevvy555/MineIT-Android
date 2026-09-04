@@ -1,12 +1,9 @@
 package com.mineit.android.domain.colony
 
 import com.mineit.android.domain.model.AbsoluteDay
-import com.mineit.android.domain.model.ColonyId
 import com.mineit.android.domain.model.GameDate
 import com.mineit.android.domain.model.GameState
-import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.model.ResourceId
-import com.mineit.android.domain.model.TechnologyLevels
 import com.mineit.android.domain.resources.Inventory
 import com.mineit.android.domain.resources.QualityBand
 import com.mineit.android.domain.resources.ResourceCategory
@@ -18,6 +15,7 @@ import com.mineit.android.domain.world.Sustainability
 import com.mineit.android.domain.world.TerrainType
 import com.mineit.android.domain.world.TileDevelopment
 import com.mineit.android.domain.world.WorldTile
+import com.mineit.android.testing.EstablishedColonyFixture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -134,6 +132,13 @@ class Phase4ColonyDomainTest {
                 development = TileDevelopment(DevelopmentKind.POWER, level = 1),
             )
         }
+        state = updateTile(state, SectorCoordinate(3, 0)) { tile ->
+            tile.copy(
+                terrain = TerrainType.PLAIN,
+                revealed = true,
+                development = TileDevelopment(DevelopmentKind.INDUSTRY, level = 1),
+            )
+        }
         state = state.withActiveColony { colony ->
             colony.copy(
                 headquarters = HeadquartersIdentityState(
@@ -156,7 +161,7 @@ class Phase4ColonyDomainTest {
         assertTrue(headquartersCoordinate in network.poweredHeadquarters)
         assertEquals(1.0, network.lifeSupportPowerFactor, 1e-9)
         assertEquals(1.0, network.spaceportPowerFactor, 1e-9)
-        assertTrue("Commercial Industry should receive only the generation left after higher bands.", network.industryPowerFactor in 0.0..0.1)
+        assertTrue("Commercial built Industry should receive only the generation left after higher bands.", network.industryPowerFactor in 0.0..0.1)
     }
 
     @Test
@@ -267,16 +272,7 @@ class Phase4ColonyDomainTest {
         assertTrue(continuity.networkAvailable)
     }
 
-    private fun settledState(): GameState {
-        val factory = NewGameFactory()
-        return factory.settleLandingSite(
-            factory.contract01(
-                colonySeed = 123456789L,
-                colonyId = ColonyId("intro-123456789"),
-            ),
-            0,
-        )
-    }
+    private fun settledState(): GameState = EstablishedColonyFixture.contract01()
 
     private fun finiteOreDeposit(): ResourceDeposit = ResourceDeposit(
         resourceId = ResourceId("iron"),
