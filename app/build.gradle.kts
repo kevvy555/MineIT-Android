@@ -25,6 +25,12 @@ android {
         buildConfig = true
     }
 
+    androidResources {
+        // Preserve the source-art archive in Git without packaging multi-megabyte originals into the APK.
+        // Runtime presentation consumes the optimized WebP atlases/files beside these directories.
+        ignoreAssetsPatterns += "<dir>originals"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
