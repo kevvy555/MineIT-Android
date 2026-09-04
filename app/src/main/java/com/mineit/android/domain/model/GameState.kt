@@ -1,5 +1,6 @@
 package com.mineit.android.domain.model
 
+import com.mineit.android.domain.colony.HeadquartersIdentityState
 import com.mineit.android.domain.contracts.ContractState
 import com.mineit.android.domain.resources.Inventory
 import com.mineit.android.domain.world.WorldState
@@ -76,11 +77,12 @@ data class ColonyState(
     val world: WorldState = WorldState(),
     val emergencyMode: Boolean = false,
     val foodStarvationDays: Int = 0,
+    val headquarters: HeadquartersIdentityState = HeadquartersIdentityState(),
     /**
      * Durable staged ownership until the full ship domain is migrated. It represents the
      * canonical founding ship being physically docked at this colony and therefore able
-     * to provide its current 50 Industry support. Phase 8 will migrate this fact into the
-     * full fleet model rather than keeping two independent ship states.
+     * to provide its current 50 Industry support and temporary/emergency command capability.
+     * Phase 8 will migrate this fact into the full fleet model.
      */
     val foundingShipDocked: Boolean = true,
 ) {
