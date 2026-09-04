@@ -10,14 +10,19 @@ import com.mineit.android.ui.theme.MineItTheme
 fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val selectedCoordinate by viewModel.selectedSector.collectAsStateWithLifecycle()
-    val selectedSector = state.sectors.firstOrNull { it.coordinate == selectedCoordinate }
+    val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
+    val selectedSector = state.activeColony.world.tileAt(selectedCoordinate ?: return@let null)
 
     MineItTheme {
         MineItScreen(
             state = state,
             selectedSector = selectedSector,
+            selectedCoordinate = selectedCoordinate,
+            statusMessage = statusMessage,
+            onSelectLandingSite = viewModel::selectLandingSite,
             onSelectSector = viewModel::selectSector,
-            onAdvanceDay = viewModel::advanceDay,
+            onSurveySelectedSector = viewModel::surveySelectedSector,
+            onAdvanceSurveyDay = viewModel::advanceSurveyDay,
         )
     }
 }
