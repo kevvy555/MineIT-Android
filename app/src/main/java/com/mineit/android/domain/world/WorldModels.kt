@@ -72,6 +72,7 @@ data class WorldTile(
 @Serializable
 data class SurveyTask(
     val coordinate: SectorCoordinate,
+    val totalDays: Int,
     val daysRemaining: Double,
     val scanningLevel: Int,
     val resurvey: Boolean,
