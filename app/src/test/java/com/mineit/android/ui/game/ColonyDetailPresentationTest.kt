@@ -44,9 +44,16 @@ class ColonyDetailPresentationTest {
             model.summary.map { it.label },
         )
         assertEquals(
+            listOf("COMMAND", "POWER", "WORKFORCE", "INDUSTRY", "SPACEPORT"),
+            model.operations.map { it.title },
+        )
+        assertEquals(
             listOf("POWER NETWORK", "OPERATIONAL WORKFORCE", "INDUSTRIAL CAPACITY", "COMMAND NETWORK", "SPACEPORT"),
             model.sections.map { it.title },
         )
+        assertEquals("COLONY CONTROL", model.kicker)
+        assertEquals("NO COMMAND", model.controlStatus)
+        assertEquals(listOf("COLONY SERVICES", "UNLINKED"), model.badges)
         assertEquals("20", model.section("OPERATIONAL WORKFORCE").metric("FREE").value)
         assertEquals("AVAILABLE", model.section("POWER NETWORK").status)
         assertEquals("AVAILABLE", model.section("INDUSTRIAL CAPACITY").status)
@@ -97,6 +104,8 @@ class ColonyDetailPresentationTest {
         assertEquals("OVERLOADED", model.section("INDUSTRIAL CAPACITY").status)
         assertEquals("OFFLINE", model.section("COMMAND NETWORK").status)
         assertEquals("OFFLINE", model.section("SPACEPORT").status)
+        assertEquals("LINK OFFLINE", model.controlStatus)
+        assertEquals(ColonyDetailTone.CRITICAL, model.controlTone)
         assertEquals(ColonyDetailTone.CRITICAL, model.summary.first { it.label == "WORKFORCE" }.tone)
         assertEquals(1, model.alerts.size)
         assertTrue(model.alerts.single().contains("Primary Headquarters must be fully staffed."))
