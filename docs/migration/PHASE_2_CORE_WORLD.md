@@ -1,11 +1,11 @@
 # MineIT Android Migration — Phase 2 Core Data, Resources and Deterministic World
 
 **Phase:** 2 — Core data, current resources and deterministic world  
-**Status:** In Progress — implementation green; final documented head pending CI  
+**Status:** Implementation complete — `0.3.1-migration` hands-on validation pending  
 **Started:** 4 September 2026  
 **Source behavioural baseline:** `kevvy555/MineIT` commit `9e58983adaa7a15cd525451266ce9df3c17ae886`, game `5.13.15`, web save `16`  
 **Android branch:** `feature/migration-phase-2`  
-**Android version:** `0.3.0-migration` / version code `6`
+**Android version:** `0.3.1-migration` / version code `7`
 
 ## Source reviewed
 
@@ -15,6 +15,7 @@ Phase 2 was grounded against the pinned source implementation rather than inferr
 - `js/core/utils.js`;
 - `js/data/resources.js`;
 - `js/data/contracts.js`;
+- `js/data/technologies.js`;
 - `js/domain/resource-service.js`;
 - `js/domain/contract-service.js`;
 - `js/domain/game-state.js`;
@@ -33,7 +34,8 @@ The source web game uses a **360-day year** (`CONFIG.DAYS_PER_YEAR = 360`).
 Phase 1 had mistakenly introduced a 365-day native `GameDate`. Phase 2 corrected the permanent native calendar to 360 days and added regression coverage:
 
 - Year 4 Day 360 = absolute day 1440;
-- absolute day 361 = Year 2 Day 1.
+- absolute day 361 = Year 2 Day 1;
+- `GameDate.nextDay()` rolls Year 4 Day 360 to Year 5 Day 1.
 
 This is a migration defect correction, not an intentional gameplay divergence.
 
@@ -51,7 +53,7 @@ The native `Contract01` definition now uses the pinned current web values, inclu
 - goals Food 120, Industry 520, Population 1050;
 - Silver/Gold/Platinum bands 450,000 / 1,000,000 / 2,200,000.
 
-`NewGameFactory` now creates a deterministic real Contract 01 start state with the current starter values:
+`NewGameFactory` creates a deterministic real Contract 01 start state with the current starter values:
 
 - cash 32,000;
 - population 120;
@@ -71,7 +73,7 @@ The starter inventory uses the existing current resources and excellent quality 
 
 ## Current resource catalogue
 
-All **40 current web resource definitions** are now represented by typed native `ResourceDefinition` records using stable `ResourceId` identity.
+All **40 current web resource definitions** are represented by typed native `ResourceDefinition` records using stable `ResourceId` identity.
 
 Fields ported include:
 
@@ -94,7 +96,7 @@ No new resource catalogue, recipe, refined material, manufacturing product, ship
 
 `ExtractionCompatibility` is the single native owner for the current resource-to-extractor-family mapping.
 
-It preserves current web behaviour while avoiding the web architecture's duplicated compatibility maps. Native world, extraction and later UI rules should query this owner rather than create parallel maps.
+It preserves current web behaviour while avoiding the web architecture's duplicated compatibility maps. Native world, extraction and later UI rules query this owner rather than create parallel maps.
 
 Current families represented are Farm, Ranch, Bio, Algae, Quarry, Rig, Mine and Deep Mine.
 
@@ -154,6 +156,16 @@ Golden parity cases include:
 - `(-3,-4)` at level 1 → clear reading;
 - the same `(-3,-4)` resurveyed at level 5 → Natural Gas, quality 449, Large deposit, reserve 126126.
 
+## Scanning capability
+
+`ScanningTechnology` now owns the current source scanning slot/time-factor/hint-tier table rather than letting UI code hard-code those values.
+
+Representative locked values:
+
+- level 1 → 1 slot, 1.000 scan-time factor;
+- level 3 → 2 slots, 0.950 factor;
+- level 10 → 5 slots, 0.775 factor.
+
 ## Surveying
 
 `SurveyService` ports the current queue/timing behaviour using immutable `WorldState` transitions:
@@ -168,11 +180,13 @@ Golden parity cases include:
 - completion through `WorldDiscovery`;
 - deterministic survey state suitable for JVM tests.
 
+`SurveyGameService` is the aggregate-level owner used by the application/UI boundary. It applies current scanning capability to the active colony and returns a new `GameState`; the UI never mutates world/game state directly.
+
 The parity fixture locks `(-2,-4)` to 9 initial survey days and 5 resurvey days under baseline factors.
 
 ## Native state changes
 
-The permanent `GameState` foundation now grows only for domains actually migrated in Phase 2.
+The permanent `GameState` foundation grows only for domains actually migrated in Phase 2.
 
 `CompanyState` gains typed technology levels.
 
@@ -193,11 +207,13 @@ Because Phase 2's added state fields have semantic defaults, the migration advan
 
 Regression coverage proves a representative `0.2.0-migration` / native-v1 save becomes native v2 while retaining cash, reputation, population and inventory amounts.
 
+The Phase 2 validation UI now uses the real `GameSession` and production `FileGameStatePersistence`, so landing-site selection and survey progress are persisted rather than living in an isolated demo StateFlow.
+
 ## Web-v16 importer growth
 
 The isolated `WebSaveV16Importer` remains the only JavaScript-save compatibility boundary.
 
-Its preview now additionally validates/exposes the current source world's:
+Its preview additionally validates/exposes the current source world's:
 
 - contract archetype;
 - tile count;
@@ -207,31 +223,57 @@ Its preview now additionally validates/exposes the current source world's:
 
 It still does not pretend that the entire web world/ship/contract portfolio is natively importable before those semantic owners exist.
 
-## UI status
+## Phase 2 native validation screen
 
-The existing Compose POC screen remains a temporary smoke-test presentation in Phase 2. It is **not** the canonical source for the new Contract 01/world model and does not yet render the production 8×8 world.
+The old 6×6 `domain/poc` state/simulation has been removed completely. There is no longer a second demo gameplay engine behind the Android screen.
 
-The header is renamed from `Native POC` to `Android Migration` so installed migration builds are not misleading.
+`0.3.1-migration` exposes the real Phase 2 state through Compose:
 
-The production map/design-system integration remains scheduled for the native UI phase; Phase 3 can build real daily simulation on the now-real domain state without coupling simulation to this temporary presentation.
+1. starts from the real Contract 01 `SITE_SELECTION` state;
+2. shows all eight deterministic landing-site candidates with actual terrain counts/seeds;
+3. selecting a site calls canonical `NewGameFactory.settleLandingSite()` through `GameSession`;
+4. shows the real 8×8 `-4..3` terrain grid;
+5. all geological sectors begin unsurveyed (the founding ship tile is excluded);
+6. tapping a sector shows its real terrain/status;
+7. the Survey action uses `SurveyGameService` and displays the real duration for current scanning capability;
+8. active/queued scan state appears directly on the map;
+9. completing a scan reveals the real deterministic resource/clear result, including resource name, category, quality, abundance/deposit scale and finite reserve where applicable;
+10. state changes are written through the Phase 1 atomic save/backup path.
+
+### Temporary validation-day control
+
+The screen contains **ADVANCE SURVEY DAY** solely to make Phase 2 testable before the full Phase 3 simulation exists.
+
+It advances:
+
+- the canonical 360-day `GameDate` by one day;
+- the real survey subsystem by one day.
+
+It intentionally does **not** run Food, Fuel, production, Power, mortality or other daily simulation rules. The screen explicitly labels this limitation. Phase 3 replaces this partial validation action with the complete daily simulation pipeline rather than keeping two day engines.
+
+This is presentation/application scaffolding around canonical domain behaviour, not a second survey implementation.
 
 ## Tests added/strengthened
 
 Phase 2 coverage includes:
 
-- source-canonical 360-day calendar;
+- source-canonical 360-day calendar and next-day rollover;
 - JS-compatible hash/random output;
 - Contract 01 starter values;
 - all-current-resource catalogue size and selected definitions;
 - central extraction compatibility;
+- source scanning capability slots/time factors;
 - deterministic landing candidate golden fixture;
 - deterministic surface/deep discovery golden fixtures;
 - lower-level scan then higher-level resurvey;
 - survey timing/queue/completion rules;
+- aggregate `SurveyGameService` path used by the native UI;
 - web-v16 world preview fields;
 - native v1→v2 save compatibility;
 - existing save/session tests updated to assert `NativeSaveFormat.CURRENT_VERSION` rather than hard-code an obsolete schema number;
 - existing persistence recovery regression coverage retained unchanged.
+
+The `0.3.1-migration` implementation head `55b626f7908256eced7cea86ec1f19dd28e0be6b` passed Android CI run `33855588637`, including unit tests, APK assembly, persistent signer verification and artifact upload.
 
 ## Explicit non-goals retained
 
@@ -257,9 +299,12 @@ Phase 2 does **not** implement:
 - [x] seeded landing/world generation is source-compatible and deterministic;
 - [x] resource discovery and resurvey rules are ported;
 - [x] resource/extractor compatibility has one native owner;
+- [x] current scanning capability data has one typed native owner;
 - [x] parity golden tests exist for randomness, terrain, discovery and surveying;
 - [x] native save v1→v2 compatibility is covered;
-- [x] implementation/test head passed Android CI before documentation close;
-- [ ] final documented branch head passes Android CI, signer verification and artifact upload;
+- [x] old POC gameplay state/simulation has been removed;
+- [x] real landing-site/world/survey state is exposed in the Android validation UI;
+- [x] implementation head passed Android CI, signer verification and artifact upload;
+- [ ] hands-on validation of `0.3.1-migration` confirms landing selection, real 8×8 map, survey timing and resource reveal on device.
 
-When the final checkbox is satisfied, Phase 3 can begin colony survival and daily simulation against this permanent state/world foundation.
+Phase 3 should begin only after the hands-on validation build is accepted. Phase 3 will replace the temporary survey-only day control with the complete colony survival/daily simulation pipeline.
