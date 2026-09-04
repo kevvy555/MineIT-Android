@@ -83,11 +83,8 @@ class ContractService(
         var next = state
         var completion = contract.copy(completed = true)
         if (!completion.completionAwarded) {
-            next = reputationService.awardColonyContract(next).state.copy(
-                company = reputationService.awardColonyContract(next).state.company,
-            )
-            // Avoid a second reputation mutation while applying the win count.
-            next = next.copy(company = next.company.copy(wins = state.company.wins + 1))
+            val reputation = reputationService.awardColonyContract(next)
+            next = reputation.state.copy(company = reputation.state.company.copy(wins = state.company.wins + 1))
             completion = completion.copy(completionAwarded = true)
         }
         next = replaceActive(next, next.activeColony.copy(contract = completion, status = ColonyStatus.HOLDOVER))
