@@ -1,5 +1,6 @@
 package com.mineit.android.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -17,7 +18,9 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val network by viewModel.network.collectAsStateWithLifecycle()
     val spaceport by viewModel.spaceport.collectAsStateWithLifecycle()
     val simulationSpeed by viewModel.simulationSpeed.collectAsStateWithLifecycle()
-    val selectedCoordinate by viewModel.selectedSector.collectAsStateWithLifecycle()
+    val selectedCoordinates by viewModel.selectedSectors.collectAsStateWithLifecycle()
+    val mapFocus by viewModel.mapFocus.collectAsStateWithLifecycle()
+    val mapFilters by viewModel.mapFilters.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
 
     MineItTheme {
@@ -30,18 +33,23 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                 onNewGame = viewModel::startNewGame,
             )
         } else {
-            val selectedSector = selectedCoordinate?.let { state.activeColony.world.tileAt(it) }
-            val selectedSurveyDays = selectedCoordinate?.let(viewModel::surveyDays)
+            BackHandler { viewModel.handleBack() }
+            val selectedTiles = selectedCoordinates
+                .mapNotNull { state.activeColony.world.tileAt(it) }
+                .sortedWith(compareBy({ it.coordinate.y }, { it.coordinate.x }))
+            val singleCoordinate = selectedCoordinates.singleOrNull()
             MineItScreen(
                 state = state,
                 metrics = metrics,
                 network = network,
                 spaceport = spaceport,
                 simulationSpeed = simulationSpeed,
-                selectedSector = selectedSector,
-                selectedCoordinate = selectedCoordinate,
-                selectedSurveyDays = selectedSurveyDays,
+                selectedTiles = selectedTiles,
+                selectedSurveyDays = singleCoordinate?.let(viewModel::surveyDays),
+                surveyableSelectedCount = viewModel.surveyableSelectedCount(),
                 statusMessage = statusMessage,
+                mapFocus = mapFocus,
+                mapFilters = mapFilters,
                 powerPreview = viewModel.buildingPreview(DevelopmentKind.POWER),
                 housingPreview = viewModel.buildingPreview(DevelopmentKind.HOUSING),
                 industryPreview = viewModel.buildingPreview(DevelopmentKind.INDUSTRY),
@@ -51,7 +59,14 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                 departureGate = viewModel.departureGate(),
                 onSelectLandingSite = viewModel::selectLandingSite,
                 onSelectSector = viewModel::selectSector,
+                onBeginMultiSelect = viewModel::beginMultiSelect,
+                onAddMultiSelect = viewModel::addMultiSelect,
                 onSurveySelectedSector = viewModel::surveySelectedSector,
+                onSurveySelectedSectors = viewModel::surveySelectedSectors,
+                onClearSelection = viewModel::clearSelection,
+                onSetMapFocus = viewModel::setMapFocus,
+                onToggleMapFilter = viewModel::toggleMapFilter,
+                onClearMapFilters = viewModel::clearMapFilters,
                 onBuild = viewModel::buildSelected,
                 onDevelopExtraction = viewModel::developSelectedResource,
                 onUpgrade = viewModel::upgradeSelected,
@@ -59,6 +74,7 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                 onSetPrimaryHeadquarters = viewModel::setSelectedAsPrimaryHeadquarters,
                 onAdvanceDay = viewModel::advanceDay,
                 onSetSimulationSpeed = viewModel::setSimulationSpeed,
+                onMainMenu = viewModel::returnToMainMenu,
             )
         }
     }

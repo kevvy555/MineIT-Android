@@ -18,9 +18,12 @@ import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.simulation.DailySimulationResult
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.SectorCoordinate
+import com.mineit.android.ui.map.MapFocus
+import com.mineit.android.ui.map.MapStateFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class GameScreen {
@@ -61,6 +64,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _selectedSector = MutableStateFlow<SectorCoordinate?>(null)
     val selectedSector: StateFlow<SectorCoordinate?> = _selectedSector.asStateFlow()
+
+    private val _selectedSectors = MutableStateFlow<Set<SectorCoordinate>>(emptySet())
+    val selectedSectors: StateFlow<Set<SectorCoordinate>> = _selectedSectors.asStateFlow()
+
+    private val _mapFocus = MutableStateFlow(MapFocus.ALL)
+    val mapFocus: StateFlow<MapFocus> = _mapFocus.asStateFlow()
+
+    private val _mapFilters = MutableStateFlow<Set<MapStateFilter>>(emptySet())
+    val mapFilters: StateFlow<Set<MapStateFilter>> = _mapFilters.asStateFlow()
 
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
@@ -107,7 +119,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             simulationClock.setSpeed(0)
             val freshState = composition.createNewGame()
             val result = session.reset("new-game", freshState)
-            _selectedSector.value = null
+            resetMapUi()
             refreshDerived(result.state)
             _canContinue.value = result.persistence is PersistenceSaveResult.Success
             _screen.value = GameScreen.GAME
@@ -122,16 +134,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun continueGame() {
         if (!_entryReady.value || !_canContinue.value || state.value.activeColony.status == ColonyStatus.DEAD) return
         simulationClock.setSpeed(0)
-        _selectedSector.value = null
+        resetMapUi()
         refreshDerived(state.value)
         _screen.value = GameScreen.GAME
         _statusMessage.value = null
     }
 
+    fun returnToMainMenu() {
+        simulationClock.setSpeed(0)
+        clearSelection()
+        _canContinue.value = state.value.activeColony.status != ColonyStatus.DEAD
+        _screen.value = GameScreen.MAIN_MENU
+        _statusMessage.value = null
+    }
+
+    /** Back first clears map context/multi-selection, then returns to the native main menu. */
+    fun handleBack() {
+        if (_selectedSectors.value.isNotEmpty()) clearSelection() else returnToMainMenu()
+    }
+
     fun selectLandingSite(index: Int) {
         viewModelScope.launch {
             val result = session.commit("select-landing-site") { current -> newGameFactory.settleLandingSite(current, index) }
-            _selectedSector.value = null
+            clearSelection()
             refreshDerived(result.state)
             _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
                 "Landing Site ${index + 1} selected. Simulation remains paused until you start it."
@@ -141,7 +166,37 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectSector(coordinate: SectorCoordinate) {
         _selectedSector.value = coordinate
+        _selectedSectors.value = setOf(coordinate)
         _statusMessage.value = null
+    }
+
+    fun beginMultiSelect(coordinate: SectorCoordinate) {
+        _selectedSector.value = coordinate
+        _selectedSectors.value = setOf(coordinate)
+        _statusMessage.value = "Drag across sectors to build a survey selection."
+    }
+
+    fun addMultiSelect(coordinate: SectorCoordinate) {
+        _selectedSectors.update { it + coordinate }
+    }
+
+    fun clearSelection() {
+        _selectedSector.value = null
+        _selectedSectors.value = emptySet()
+        _statusMessage.value = null
+    }
+
+    fun setMapFocus(focus: MapFocus) {
+        _mapFocus.value = focus
+    }
+
+    fun toggleMapFilter(filter: MapStateFilter) {
+        _mapFilters.update { current -> if (filter in current) current - filter else current + filter }
+    }
+
+    fun clearMapFilters() {
+        _mapFilters.value = emptySet()
+        _mapFocus.value = MapFocus.ALL
     }
 
     fun surveyDays(coordinate: SectorCoordinate): Int? = surveyGameService.surveyDays(
@@ -150,8 +205,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         commandEfficiency = _network.value.headquarters.efficiency,
     )
 
+    fun surveyableSelectedCount(): Int = _selectedSectors.value.count { surveyDays(it) != null }
+
     fun surveySelectedSector() {
-        val coordinate = _selectedSector.value ?: return
+        val coordinate = singleActionCoordinate() ?: return
         val snapshot = state.value
         val commandEfficiency = _network.value.headquarters.efficiency
         val days = surveyGameService.surveyDays(snapshot, coordinate, commandEfficiency) ?: return
@@ -166,18 +223,43 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun surveySelectedSectors() {
+        val coordinates = _selectedSectors.value.sortedWith(compareBy<SectorCoordinate> { it.y }.thenBy { it.x })
+        if (coordinates.isEmpty()) return
+        viewModelScope.launch {
+            var queuedCount = 0
+            val result = session.commit("enqueue-survey-selection") { current ->
+                var next = current
+                coordinates.forEach { coordinate ->
+                    val before = next.activeColony.world.activeSurveys.size + next.activeColony.world.surveyQueue.size
+                    val efficiency = networkService.calculate(next).headquarters.efficiency
+                    next = surveyGameService.enqueue(next, coordinate, efficiency)
+                    val after = next.activeColony.world.activeSurveys.size + next.activeColony.world.surveyQueue.size
+                    if (after > before) queuedCount += 1
+                }
+                next
+            }
+            refreshDerived(result.state)
+            _statusMessage.value = when {
+                result.persistence is PersistenceSaveResult.Failure -> "$queuedCount sectors queued, but the native save could not be written."
+                queuedCount > 0 -> "$queuedCount sectors added to the survey plan."
+                else -> "No selected sectors are currently surveyable."
+            }
+        }
+    }
+
     fun buildingPreview(kind: DevelopmentKind): DevelopmentPreview? {
-        val coordinate = _selectedSector.value ?: return null
+        val coordinate = singleActionCoordinate() ?: return null
         return developmentService.buildingPreview(state.value, coordinate, kind)
     }
 
     fun extractionPreview(): DevelopmentPreview? {
-        val coordinate = _selectedSector.value ?: return null
+        val coordinate = singleActionCoordinate() ?: return null
         return developmentService.extractionPreview(state.value, coordinate)
     }
 
     fun upgradePreview(): DevelopmentPreview? {
-        val coordinate = _selectedSector.value ?: return null
+        val coordinate = singleActionCoordinate() ?: return null
         return developmentService.buildingUpgradePreview(state.value, coordinate)
     }
 
@@ -198,7 +280,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setSelectedAsPrimaryHeadquarters() {
-        val coordinate = _selectedSector.value ?: return
+        val coordinate = singleActionCoordinate() ?: return
         viewModelScope.launch {
             val preview = headquartersService.setPrimary(state.value, coordinate)
             if (!preview.ok) {
@@ -222,11 +304,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = if (speed == 0) "Simulation paused." else "Simulation running at ${speed}×."
     }
 
+    private fun singleActionCoordinate(): SectorCoordinate? = _selectedSectors.value.singleOrNull()
+
     private fun commitDevelopment(
         reason: String,
         action: (GameState, SectorCoordinate) -> DevelopmentActionResult,
     ) {
-        val coordinate = _selectedSector.value ?: return
+        val coordinate = singleActionCoordinate() ?: return
         val preview = action(state.value, coordinate)
         if (!preview.ok) {
             _statusMessage.value = preview.message
@@ -252,7 +336,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (result.colonyDied) {
             simulationClock.setSpeed(0)
-            _selectedSector.value = null
+            clearSelection()
             _canContinue.value = false
             _screen.value = GameScreen.MAIN_MENU
             _statusMessage.value = if (commit.persistence is PersistenceSaveResult.Success) {
@@ -280,6 +364,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _network.value = nextNetwork
         _spaceport.value = spaceportService.status(gameState, nextNetwork)
         _metrics.value = completedDayMetrics ?: dailySimulationEngine.recalculate(gameState)
+    }
+
+    private fun resetMapUi() {
+        _selectedSector.value = null
+        _selectedSectors.value = emptySet()
+        _mapFocus.value = MapFocus.ALL
+        _mapFilters.value = emptySet()
     }
 
     private fun formatPopulation(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else "%.2f".format(value)

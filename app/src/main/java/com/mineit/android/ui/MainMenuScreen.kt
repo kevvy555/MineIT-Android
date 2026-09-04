@@ -1,5 +1,6 @@
 package com.mineit.android.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,9 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,8 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.mineit.android.BuildConfig
+import com.mineit.android.ui.design.MineItPalette
+import com.mineit.android.ui.design.MineItPanel
+import com.mineit.android.ui.design.MineItPrimaryButton
+import com.mineit.android.ui.design.MineItSecondaryButton
+import com.mineit.android.ui.design.MineItSpacing
 
 @Composable
 fun MainMenuScreen(
@@ -31,64 +35,76 @@ fun MainMenuScreen(
     onNewGame: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+    Surface(modifier = modifier.fillMaxSize(), color = MineItPalette.Background) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 32.dp),
+                .background(MineItPalette.Background)
+                .padding(horizontal = 24.dp, vertical = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
                 text = "MINEIT",
-                fontSize = 38.sp,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.primary,
+                color = MineItPalette.Text,
             )
             Text(
-                text = "Android Migration ${BuildConfig.VERSION_NAME}",
+                text = "KOPLIN CONTRACT MINING",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = .72f),
+                color = MineItPalette.Accent,
             )
-            Spacer(Modifier.height(36.dp))
+            Text(
+                text = BuildConfig.VERSION_NAME,
+                style = MaterialTheme.typography.labelSmall,
+                color = MineItPalette.Muted,
+            )
 
-            Column(
-                modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+            Spacer(Modifier.height(28.dp))
+
+            MineItPanel(
+                modifier = Modifier.widthIn(max = 340.dp).fillMaxWidth(),
+                raised = true,
             ) {
+                Text("CONTRACT OPERATIONS", style = MaterialTheme.typography.titleSmall, color = MineItPalette.Accent)
+                Text(
+                    "Establish a colony, survey the terrain and build a sustainable mining operation.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MineItPalette.Muted,
+                )
                 if (canContinue) {
-                    Button(
+                    MineItPrimaryButton(
+                        text = "CONTINUE",
                         onClick = onContinue,
                         enabled = ready,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                    ) {
-                        Text("CONTINUE", fontWeight = FontWeight.Bold)
-                    }
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-                OutlinedButton(
+                MineItSecondaryButton(
+                    text = "NEW GAME",
                     onClick = onNewGame,
                     enabled = ready,
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                ) {
-                    Text("NEW GAME", fontWeight = FontWeight.Bold)
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    accent = MineItPalette.Warning,
+                )
             }
 
-            Spacer(Modifier.height(22.dp))
+            Spacer(Modifier.height(MineItSpacing.Lg))
             Text(
                 text = when {
                     !ready -> "Loading native save…"
                     statusMessage != null -> statusMessage
-                    canContinue -> "Continue the saved colony or begin a fresh Contract 01 game."
-                    else -> "Start a new Contract 01 game."
+                    canContinue -> "A saved colony is ready to continue."
+                    else -> "Start a new Contract 01 operation."
                 },
                 modifier = Modifier.widthIn(max = 360.dp),
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
-                color = if (statusMessage?.contains("lost", ignoreCase = true) == true) {
-                    MaterialTheme.colorScheme.error
+                color = if (statusMessage?.contains("lost", ignoreCase = true) == true || statusMessage?.contains("failed", ignoreCase = true) == true) {
+                    MineItPalette.Critical
                 } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = .72f)
+                    MineItPalette.Muted
                 },
             )
         }
