@@ -9,6 +9,7 @@ import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -52,6 +53,29 @@ class FileGameStatePersistenceTest {
         assertTrue(recovered.recoveredFromBackup)
         assertEquals(first, recovered.state)
         assertEquals(1_000L, recovered.metadata.savedAtEpochMillis)
+    }
+
+    @Test
+    fun `fresh game reset discards previous run recovery history`() = withTempDirectory { directory ->
+        val repository = repository(directory)
+        val first = TestGameStates.foundationState(cash = 100)
+        val second = TestGameStates.foundationState(cash = 200, date = GameDate(1, 2))
+        val fresh = TestGameStates.foundationState(cash = 32_000, date = GameDate(1, 1))
+
+        runBlocking { repository.save(first) }
+        runBlocking { repository.save(second) }
+        assertTrue(File(directory, FileGameStatePersistence.BACKUP_FILE_NAME).exists())
+
+        val reset = runBlocking { repository.reset(fresh) }
+        val loaded = runBlocking { repository.load() } as PersistenceLoadResult.Loaded
+
+        assertTrue(reset is PersistenceSaveResult.Success)
+        assertEquals(fresh, loaded.state)
+        assertEquals(SaveSource.ACTIVE, loaded.source)
+        assertFalse(File(directory, FileGameStatePersistence.BACKUP_FILE_NAME).exists())
+
+        File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("broken-fresh-save")
+        assertTrue(runBlocking { repository.load() } is PersistenceLoadResult.Failure)
     }
 
     @Test
