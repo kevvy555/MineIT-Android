@@ -278,9 +278,59 @@ data class ColonyNetworkSnapshot(
 ) {
     companion object {
         fun empty(): ColonyNetworkSnapshot {
-            val hq = HeadquartersNetwork(emptyList(), null, null, false, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0)
-            val continuity = HeadquartersContinuity(HeadquartersContinuityPhase.ONLINE, false, false, true, 0.0, 1.0, 1.0, 0, 0, false, "Headquarters network online.", hq, HeadquartersOutageState())
-            return ColonyNetworkSnapshot(emptyList(), 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 0.0, emptyMap(), emptySet(), hq, continuity)
+            val hq = HeadquartersNetwork(
+                rows = emptyList(),
+                sourceType = null,
+                sourceCoordinate = null,
+                primaryOperational = false,
+                reservedStaff = 0.0,
+                capacity = 0.0,
+                load = 0.0,
+                overloadPenalty = 0.0,
+                bonus = 0.0,
+                efficiency = 1.0,
+            )
+            val continuity = HeadquartersContinuity(
+                phase = HeadquartersContinuityPhase.ONLINE,
+                established = false,
+                primaryOperational = false,
+                networkAvailable = true,
+                penalty = 0.0,
+                efficiencyFactor = 1.0,
+                effectiveCommandEfficiency = 1.0,
+                offlineDays = 0,
+                recoveryDaysRemaining = 0,
+                downTools = false,
+                reason = "Headquarters network online.",
+                network = hq,
+                persisted = HeadquartersOutageState(),
+            )
+            return ColonyNetworkSnapshot(
+                activeSites = emptyList(),
+                workforceAvailable = 0.0,
+                workforceRequired = 0.0,
+                workforceSurvivalFactor = 1.0,
+                workforceCommercialFactor = 1.0,
+                industryInstalled = 0.0,
+                industryCapacity = 0.0,
+                industryLoad = 0.0,
+                industrySurvivalFactor = 1.0,
+                industryCommercialFactor = 1.0,
+                industryStaffFactor = 1.0,
+                industryPopulationRequired = 0.0,
+                powerDemand = 0.0,
+                powerCapacity = 0.0,
+                fullFuelBurn = 0.0,
+                fuelLimitedGeneration = 0.0,
+                powerFactor = 1.0,
+                lifeSupportPowerFactor = 1.0,
+                industryPowerFactor = 1.0,
+                spaceportPowerFactor = 0.0,
+                sitePowerFactors = emptyMap(),
+                poweredHeadquarters = emptySet(),
+                headquarters = hq,
+                continuity = continuity,
+            )
         }
     }
 }
