@@ -1,7 +1,7 @@
 # MineIT Android Migration — Phase 3 Daily Simulation and Colony Survival
 
 **Phase:** 3 — Colony survival and daily simulation  
-**Status:** Implementation in validation  
+**Status:** Implementation complete — `0.4.0-migration` hands-on validation pending  
 **Started:** 4 September 2026  
 **Source behavioural baseline:** `kevvy555/MineIT` commit `9e58983adaa7a15cd525451266ce9df3c17ae886`, game `5.13.15`, web save `16`  
 **Android branch:** `feature/migration-phase-3`  
@@ -289,6 +289,8 @@ Phase 3 regression coverage includes:
 - SimulationClock virtual-time cadence and pause behavior;
 - all prior Phase 0–2 parity/save/session regressions remain active.
 
+The final Phase 3 implementation/documentation head `373673c70a5f70f30379040ebe180c734d6f8be0` passed Android CI run `33858782466`. The run completed all JVM tests and APK assembly successfully, verified the persistent development signer, and uploaded the debug APK artifact.
+
 ## Explicit non-goals retained
 
 Phase 3 does **not** implement:
@@ -318,7 +320,7 @@ Phase 3 does **not** implement:
 - [x] native save v3 and cumulative migration coverage exist;
 - [x] 25-year supplied-colony soak fixture exists;
 - [x] Phase 2 survey-only day path is replaced rather than kept in parallel;
-- [ ] final Phase 3 code/documentation head passes Android CI, signer verification and artifact upload;
+- [x] final Phase 3 implementation/documentation head passed Android CI, signer verification and artifact upload;
 - [ ] `0.4.0-migration` receives hands-on device validation.
 
-Phase 3 remains on its feature branch until the final CI build and hands-on validation are accepted.
+Phase 3 remains on its feature branch until `0.4.0-migration` hands-on validation is accepted. After acceptance, update the migration guide/status, fast-forward the accepted Phase 3 head to `main`, and begin Phase 4 from that exact accepted baseline.
