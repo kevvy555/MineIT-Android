@@ -1,5 +1,6 @@
 package com.mineit.android.domain.ships
 
+import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyId
 import com.mineit.android.domain.model.ColonyState
@@ -80,10 +81,11 @@ class PlayerFleetService {
         if (losses.isEmpty()) return state
         val colony = state.activeColony
         var totalDeaths = 0.0
-        val assignments = colony.shipResidentAssignments.map { assignment ->
+        val assignments = colony.shipResidentAssignments.mapNotNull { assignment ->
             val deaths = (losses[assignment.shipId] ?: 0.0).coerceIn(0.0, assignment.residents)
             totalDeaths += deaths
-            assignment.copy(residents = max(0.0, assignment.residents - deaths))
+            val remaining = max(0.0, assignment.residents - deaths)
+            if (remaining > .0001) assignment.copy(residents = remaining) else null
         }
         val updatedColony = colony.copy(
             population = max(0.0, colony.population - totalDeaths),
@@ -92,14 +94,57 @@ class PlayerFleetService {
         return state.copy(colonies = state.colonies.map { if (it.id == colony.id) updatedColony else it })
     }
 
-    fun moveResidentsAshore(state: GameState, shipId: ShipId, requested: Double): FleetActionResult {
+    fun moveResidentsAshore(
+        state: GameState,
+        shipId: ShipId,
+        requested: Double,
+        housingCapacity: Double,
+        network: ColonyNetworkSnapshot,
+        spaceportServicesAvailable: Boolean,
+        confirmed: Boolean = false,
+    ): FleetActionResult {
         val colony = state.activeColony
+        val ship = state.fleet.ships.firstOrNull { it.id == shipId }
+            ?: return FleetActionResult(false, state, "Ship not found.", 0.0)
+        if (ship.dockedColonyId != colony.id) {
+            return FleetActionResult(false, state, "The selected player ship is not docked at this colony.", 0.0)
+        }
         val assignment = colony.shipResidentAssignments.firstOrNull { it.shipId == shipId }
             ?: return FleetActionResult(false, state, "No colony residents are accommodated aboard that ship.", 0.0)
-        val moved = requested.takeIf { it.isFinite() }?.coerceIn(0.0, assignment.residents) ?: 0.0
-        if (moved <= .0001) return FleetActionResult(false, state, "Resident transfer amount must be positive.", 0.0)
-        val updatedAssignments = colony.shipResidentAssignments.map {
-            if (it.shipId == shipId) it.copy(residents = it.residents - moved) else it
+        val freeHousing = max(0.0, housingCapacity - colony.planetaryAccommodationResidents)
+        val normalized = requested.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val moved = minOf(assignment.residents, freeHousing, kotlin.math.floor(normalized))
+        if (moved <= .0001) {
+            val reason = if (freeHousing <= .0001) "No planetary accommodation is available." else "Resident transfer amount must be positive."
+            return FleetActionResult(false, state, reason, 0.0)
+        }
+        if (!spaceportServicesAvailable) {
+            return FleetActionResult(false, state, "Powered Spaceport services are required to move residents ashore.", 0.0)
+        }
+        if (network.powerCapacity <= .0001) {
+            return FleetActionResult(false, state, "Build and power a colony Power Plant before moving residents into habitats.", 0.0)
+        }
+        val supportLoad = max(.5, colony.contract?.supportLoad ?: 1.0)
+        val incrementalSupport = moved * MineItConfig.LIFE_SUPPORT_POWER_PER_COLONIST * supportLoad
+        val projectedDemand = network.powerDemand + incrementalSupport
+        val availableGeneration = network.fuelLimitedGeneration
+        val shortage = max(0.0, projectedDemand - availableGeneration)
+        if (shortage > .0001 && !confirmed) {
+            return FleetActionResult(
+                ok = false,
+                state = state,
+                message = "Power shortage warning: projected demand is %.1f against %.1f available generation (%.1f short). Transfer anyway?".format(projectedDemand, availableGeneration, shortage),
+                amount = moved,
+                requiresConfirmation = true,
+                projectedDemand = projectedDemand,
+                availableGeneration = availableGeneration,
+            )
+        }
+        val updatedAssignments = colony.shipResidentAssignments.mapNotNull {
+            if (it.shipId != shipId) it else {
+                val remaining = it.residents - moved
+                if (remaining > .0001) it.copy(residents = remaining) else null
+            }
         }
         val updatedColony = colony.copy(
             shipResidentAssignments = updatedAssignments,
@@ -108,8 +153,10 @@ class PlayerFleetService {
         return FleetActionResult(
             ok = true,
             state = state.copy(colonies = state.colonies.map { if (it.id == colony.id) updatedColony else it }),
-            message = "Moved ${moved.toInt()} residents ashore.",
+            message = "Moved ${moved.toInt()} residents ashore${if (shortage > .0001) " with a projected Power shortage" else ""}.",
             amount = moved,
+            projectedDemand = projectedDemand,
+            availableGeneration = availableGeneration,
         )
     }
 
@@ -240,4 +287,7 @@ data class FleetActionResult(
     val state: GameState,
     val message: String,
     val amount: Double,
+    val requiresConfirmation: Boolean = false,
+    val projectedDemand: Double? = null,
+    val availableGeneration: Double? = null,
 )
