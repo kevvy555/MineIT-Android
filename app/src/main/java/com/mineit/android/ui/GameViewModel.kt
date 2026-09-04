@@ -22,7 +22,10 @@ import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.ResourceId
+import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.simulation.ColonyMetrics
+import com.mineit.android.domain.trade.ColonistTransferProjection
+import com.mineit.android.domain.trade.TradeQuote
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.ui.map.MapFocus
@@ -242,12 +245,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun contractScore(): ContractScore? = contractService.score(state.value, _metrics.value.foodProduction, _metrics.value.industry)
     fun populationSupport(): PopulationSupportCapacity = populationSupportService.capacity(state.value, _network.value)
     fun tradeDaysUntilArrival(): Int = tradeService.daysUntilArrival(state.value)
+    fun tradeCargoCapacity(): Double = tradeService.cargoCapacity(state.value)
+    fun tradeCargoRemaining(): Double = tradeService.cargoRemaining(state.value)
+    fun tradeExportCapacity(): Double = tradeService.exportCapacity(state.value)
+    fun tradeExportRemaining(): Double = tradeService.exportRemaining(state.value)
+    fun tradePassengerRemaining(): Int = tradeService.passengerRemaining(state.value)
+    fun tradeSellableAmount(resourceId: ResourceId): Double = tradeService.sellableAmount(state.value, resourceId)
+    fun tradeSellQuote(resourceId: ResourceId, amount: Double): TradeQuote = tradeService.quoteSell(state.value, resourceId, amount)
+    fun tradeBuyPrice(resourceId: ResourceId): Double = tradeService.buyPrice(resourceId)
+    fun tradeColonistProjection(): ColonistTransferProjection {
+        val support = populationSupport()
+        val surplus = max(0.0, _metrics.value.foodProduction - _metrics.value.foodDemand)
+        return tradeService.colonistProjection(state.value, support.supportedPopulationCapacity, surplus)
+    }
     fun buyerOffers(): List<BuyerOffer> = buyerService.availableOffers(state.value).take(25)
     fun buyerContracts(): List<BuyerContract> = buyerService.activeContracts(state.value)
     fun buyerProjection(contractId: String): BuyerCollectionProjection? = buyerService.projection(state.value, contractId)
 
     fun setTradeReserve(amount: Double) = commitCommercial("set-trade-reserve") { tradeService.setColonyTradeReserve(it, amount) }
     fun sellResource(resourceId: ResourceId, amount: Double) = commitCommercialAction("corporate-sell") { tradeService.sell(it, resourceId, amount, _spaceport.value.tradeAllowed) }
+    fun sellTradeCategory(category: ResourceCategory) = commitCommercialAction("corporate-sell-category") { tradeService.sellCategory(it, category, _spaceport.value.tradeAllowed) }
+    fun sellAllTrade() = commitCommercialAction("corporate-sell-all") { tradeService.sellAll(it, _spaceport.value.tradeAllowed) }
     fun buyResource(resourceId: ResourceId, amount: Double) = commitCommercialAction("corporate-buy") { tradeService.buy(it, resourceId, amount, _spaceport.value.tradeAllowed) }
     fun departCorporateShip() = commitCommercialAction("corporate-depart") { tradeService.depart(it) }
 
