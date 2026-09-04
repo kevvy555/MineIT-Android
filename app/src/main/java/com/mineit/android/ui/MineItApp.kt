@@ -11,6 +11,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.ui.commercial.CommercialPanelScreen
+import com.mineit.android.ui.commercial.ContractCommercialPanelScreen
 import com.mineit.android.ui.commercial.CorporateEventDialog
 import com.mineit.android.ui.commercial.TradeCommercialPanelScreen
 import com.mineit.android.ui.theme.MineItTheme
@@ -90,8 +91,8 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                 )
 
                 commercialPanel?.let { panel ->
-                    if (panel == CommercialPanel.TRADE) {
-                        TradeCommercialPanelScreen(
+                    when (panel) {
+                        CommercialPanel.TRADE -> TradeCommercialPanelScreen(
                             state = state,
                             spaceport = spaceport,
                             daysUntilArrival = viewModel.tradeDaysUntilArrival(),
@@ -114,34 +115,46 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                             onTransferColonists = viewModel::transferColonists,
                             onDepartCorporateShip = viewModel::departCorporateShip,
                         )
-                    } else {
-                        val contracts = viewModel.buyerContracts()
-                        CommercialPanelScreen(
-                            panel = panel,
+
+                        CommercialPanel.CONTRACT -> ContractCommercialPanelScreen(
                             state = state,
                             metrics = metrics,
-                            spaceport = spaceport,
-                            contractScore = viewModel.contractScore(),
-                            populationSupport = viewModel.populationSupport(),
-                            tradeDaysUntilArrival = viewModel.tradeDaysUntilArrival(),
-                            buyerOffers = if (panel == CommercialPanel.BUYERS) viewModel.buyerOffers() else emptyList(),
-                            buyerContracts = contracts,
-                            buyerProjections = contracts.mapNotNull { contract -> viewModel.buyerProjection(contract.id)?.let { contract.id to it } }.toMap(),
+                            score = viewModel.contractScore(),
                             onSelectPanel = viewModel::openCommercialPanel,
                             onClose = viewModel::closeCommercialPanel,
-                            onSetReserve = viewModel::setTradeReserve,
-                            onSellResource = viewModel::sellResource,
-                            onBuyResource = viewModel::buyResource,
-                            onTransferColonists = viewModel::transferColonists,
-                            onDepartCorporateShip = viewModel::departCorporateShip,
-                            onAcceptBuyerOffer = viewModel::acceptBuyerOffer,
-                            onTransferBuyer = viewModel::transferBuyerShipment,
-                            onWaitBuyer = viewModel::continueBuyerWaiting,
-                            onMissBuyer = viewModel::resolveBuyerMiss,
-                            onCancelBuyer = viewModel::cancelBuyerContract,
                             onRenewContract = viewModel::renewContract,
                             onEndLiability = viewModel::endContractAsLiability,
                         )
+
+                        CommercialPanel.BUYERS, CommercialPanel.LOG -> {
+                            val contracts = viewModel.buyerContracts()
+                            CommercialPanelScreen(
+                                panel = panel,
+                                state = state,
+                                metrics = metrics,
+                                spaceport = spaceport,
+                                contractScore = viewModel.contractScore(),
+                                populationSupport = viewModel.populationSupport(),
+                                tradeDaysUntilArrival = viewModel.tradeDaysUntilArrival(),
+                                buyerOffers = if (panel == CommercialPanel.BUYERS) viewModel.buyerOffers() else emptyList(),
+                                buyerContracts = contracts,
+                                buyerProjections = contracts.mapNotNull { contract -> viewModel.buyerProjection(contract.id)?.let { contract.id to it } }.toMap(),
+                                onSelectPanel = viewModel::openCommercialPanel,
+                                onClose = viewModel::closeCommercialPanel,
+                                onSetReserve = viewModel::setTradeReserve,
+                                onSellResource = viewModel::sellResource,
+                                onBuyResource = viewModel::buyResource,
+                                onTransferColonists = viewModel::transferColonists,
+                                onDepartCorporateShip = viewModel::departCorporateShip,
+                                onAcceptBuyerOffer = viewModel::acceptBuyerOffer,
+                                onTransferBuyer = viewModel::transferBuyerShipment,
+                                onWaitBuyer = viewModel::continueBuyerWaiting,
+                                onMissBuyer = viewModel::resolveBuyerMiss,
+                                onCancelBuyer = viewModel::cancelBuyerContract,
+                                onRenewContract = viewModel::renewContract,
+                                onEndLiability = viewModel::endContractAsLiability,
+                            )
+                        }
                     }
                 }
 
