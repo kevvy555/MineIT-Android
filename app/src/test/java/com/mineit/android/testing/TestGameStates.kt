@@ -22,7 +22,7 @@ internal object TestGameStates {
         date = date,
         company = CompanyState(
             cash = cash,
-            reputation = 0,
+            reputation = 0.0,
         ),
         colonies = listOf(
             ColonyState(
