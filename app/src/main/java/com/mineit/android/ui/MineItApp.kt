@@ -9,6 +9,8 @@ import com.mineit.android.ui.theme.MineItTheme
 @Composable
 fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val metrics by viewModel.metrics.collectAsStateWithLifecycle()
+    val simulationSpeed by viewModel.simulationSpeed.collectAsStateWithLifecycle()
     val selectedCoordinate by viewModel.selectedSector.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     val selectedSector = selectedCoordinate?.let { state.activeColony.world.tileAt(it) }
@@ -17,6 +19,8 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     MineItTheme {
         MineItScreen(
             state = state,
+            metrics = metrics,
+            simulationSpeed = simulationSpeed,
             selectedSector = selectedSector,
             selectedCoordinate = selectedCoordinate,
             selectedSurveyDays = selectedSurveyDays,
@@ -24,7 +28,8 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
             onSelectLandingSite = viewModel::selectLandingSite,
             onSelectSector = viewModel::selectSector,
             onSurveySelectedSector = viewModel::surveySelectedSector,
-            onAdvanceSurveyDay = viewModel::advanceSurveyDay,
+            onAdvanceDay = viewModel::advanceDay,
+            onSetSimulationSpeed = viewModel::setSimulationSpeed,
         )
     }
 }
