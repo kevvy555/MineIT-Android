@@ -11,11 +11,12 @@ import org.junit.Test
 
 class FoundationModelTest {
     @Test
-    fun `game date round trips through absolute day`() {
-        val date = GameDate(year = 4, day = 365)
+    fun `game date uses canonical 360 day MineIT year`() {
+        val date = GameDate(year = 4, day = 360)
 
         assertEquals(date, GameDate.fromAbsoluteDay(date.toAbsoluteDay()))
-        assertEquals(1460, date.toAbsoluteDay().value)
+        assertEquals(1440, date.toAbsoluteDay().value)
+        assertEquals(GameDate(year = 2, day = 1), GameDate.fromAbsoluteDay(AbsoluteDay(361)))
     }
 
     @Test
