@@ -17,6 +17,7 @@ import com.mineit.android.domain.model.ColonyId
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.reputation.ReputationService
+import com.mineit.android.domain.ships.PlayerFleetService
 import com.mineit.android.domain.simulation.DailySimulationEngine
 import com.mineit.android.domain.trade.CorporateTradeService
 import com.mineit.android.domain.world.SurveyGameService
@@ -26,9 +27,16 @@ import java.io.File
 class AppComposition(application: Application) {
     val newGameFactory = NewGameFactory()
     val surveyGameService = SurveyGameService()
-    val headquartersService = HeadquartersService()
-    val colonyNetworkService = ColonyNetworkService(headquartersService)
-    val colonyDevelopmentService = ColonyDevelopmentService(headquartersService)
+    val playerFleetService = PlayerFleetService()
+    val headquartersService = HeadquartersService(playerFleetService)
+    val colonyNetworkService = ColonyNetworkService(
+        fleetService = playerFleetService,
+        headquartersService = headquartersService,
+    )
+    val colonyDevelopmentService = ColonyDevelopmentService(
+        headquartersService = headquartersService,
+        fleetService = playerFleetService,
+    )
     val populationSupportService = PopulationSupportService()
     val spaceportService = SpaceportService()
     val reputationService = ReputationService()
@@ -39,6 +47,7 @@ class AppComposition(application: Application) {
     val gameLogService = GameLogService()
     val dailySimulationEngine = DailySimulationEngine(
         surveyGameService = surveyGameService,
+        fleetService = playerFleetService,
         networkService = colonyNetworkService,
         headquartersService = headquartersService,
     )

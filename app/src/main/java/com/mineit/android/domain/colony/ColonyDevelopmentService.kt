@@ -10,6 +10,7 @@ import com.mineit.android.domain.resources.Inventory
 import com.mineit.android.domain.resources.QualityBand
 import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.resources.ResourceQuality
+import com.mineit.android.domain.ships.PlayerFleetService
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.ResourceDeposit
 import com.mineit.android.domain.world.SectorCoordinate
@@ -25,6 +26,7 @@ import kotlin.math.pow
 /** Canonical immutable owner for local building/extraction construction, upgrades and demolition. */
 class ColonyDevelopmentService(
     private val headquartersService: HeadquartersService = HeadquartersService(),
+    private val fleetService: PlayerFleetService = PlayerFleetService(),
 ) {
     fun buildingPreview(state: GameState, coordinate: SectorCoordinate, kind: DevelopmentKind): DevelopmentPreview {
         if (kind == DevelopmentKind.EXTRACT) return DevelopmentPreview(false, "Use extraction development for resources.")
@@ -151,7 +153,7 @@ class ColonyDevelopmentService(
         val family = ExtractionCompatibility.familyFor(deposit.resourceId)
         val industryRequired = industryUpgradeRequirement(deposit.category, nextLevel)
         val powerRequired = InfrastructureRules.facilityUpgradePowerGate(family, nextLevel)
-        val installedIndustry = installedIndustry(colony)
+        val installedIndustry = installedIndustry(state)
         val installedPower = installedPower(colony)
         if (installedIndustry < industryRequired) return DevelopmentPreview(false, "Site L$nextLevel needs ${industryRequired.toInt()} installed Industry; colony has ${installedIndustry.toInt()}.", nextLevel = nextLevel)
         if (installedPower < powerRequired) return DevelopmentPreview(false, "${family.displayName} L$nextLevel needs ${powerRequired.toInt()} installed Power; colony has ${installedPower.toInt()}.", nextLevel = nextLevel)
@@ -244,9 +246,9 @@ class ColonyDevelopmentService(
         .filter { it.development?.kind == DevelopmentKind.POWER && it.development.constructionComplete && !it.development.productionStopped }
         .sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
 
-    fun installedIndustry(colony: ColonyState): Double =
-        (if (colony.foundingShipDocked) InfrastructureRules.FOUNDING_SHIP_INDUSTRY else 0.0) +
-            colony.world.tiles
+    fun installedIndustry(state: GameState): Double =
+        fleetService.industrySupport(state) +
+            state.activeColony.world.tiles
                 .filter { it.development?.kind == DevelopmentKind.INDUSTRY && it.development.constructionComplete && !it.development.productionStopped }
                 .sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
 
@@ -272,7 +274,7 @@ class ColonyDevelopmentService(
         val siteWorkers = colony.world.tiles
             .filter { it.development?.kind == DevelopmentKind.EXTRACT && !it.resourceExhausted && it.deposit?.renewableWiped != true && !it.development.productionStopped }
             .sumOf { SiteOperationRules.workforceRequirement(colony, it) }
-        return max(0.0, headquartersService.baseWorkforceAvailable(colony) - hqReserved - siteWorkers)
+        return max(0.0, headquartersService.baseWorkforceAvailable(state) - hqReserved - siteWorkers)
     }
 
     private fun developBuildCost(colony: ColonyState, tile: WorldTile, deposit: ResourceDeposit): Double {
