@@ -1,22 +1,38 @@
 # Phase 6 — Contracts, Trade and Commercial Events
 
-**Status:** Implementation complete — `0.7.0-migration` hands-on validation pending  
+**Status:** Implementation/regression complete — UI/layout parity refinement required before acceptance  
 **Started:** 4 September 2026  
 **Android branch:** `feature/migration-phase-6`  
 **Starting Android head:** `b9364a4a8d7e9566df6e16d5f61e93f83bc6cd8d` (accepted Phase 5)  
 **Implementation checkpoint head:** `9380c130c63ca540e2e778810ff0cac570cd48af`  
 **Implementation checkpoint CI:** Android CI run `33897074590` / run number `254` — success  
-**Validation build:** `0.7.0-migration` / version code `12`  
+**Initial validation build:** `0.7.0-migration` / version code `12`  
 **Native save format:** `5`  
-**Web behavioural baseline:** `kevvy555/MineIT` `develop` at `9e58983adaa7a15cd525451266ce9df3c17ae886` / game `5.13.15` / web save `16`
+**Web behavioural + UI-layout baseline:** `kevvy555/MineIT` `develop` at `9e58983adaa7a15cd525451266ce9df3c17ae886` / game `5.13.15` / web save `16`
 
 ## Goal
 
 Restore the current Contract 01 commercial game loops and consequences natively without moving gameplay truth into Compose or redesigning the economy.
 
-Phase 6 covers the Corporate Ship trade loop, import/export capacity and reserves, colonist transfer, contract scoring/deadline decisions, commercial/corporate events, buyers and recurring collection ships, reputation consequences and Game Log presentation. The web implementation remains the behavioural reference.
+Phase 6 covers the Corporate Ship trade loop, import/export capacity and reserves, colonist transfer, contract scoring/deadline decisions, commercial/corporate events, buyers and recurring collection ships, reputation consequences and Game Log presentation.
+
+Following physical-device review of `0.7.0-migration`, the web implementation is now explicitly the **layout/information-hierarchy reference as well as the behavioural reference**. Phase 6 is therefore not accepted until its player-facing commercial screens and the current Colony Details presentation are refined toward recognisable web layout parity while retaining deliberate native improvements.
 
 The post-migration resource overhaul remains explicitly out of scope.
+
+## Revised migration method from this phase onward
+
+The Phase 1–6 backend-first work established the permanent state, persistence, simulation and domain foundations. From this point onward player-facing migration is performed as **UI-led vertical feature slices**:
+
+1. inspect the existing web HTML/view, CSS, UI/controller and domain owner/tests together;
+2. identify what should be preserved, deliberately refined or replaced;
+3. confirm which native domain/application capability already exists;
+4. migrate any missing backend functionality in canonical native owners;
+5. recreate the screen in Compose with the same recognisable hierarchy and workflow;
+6. apply agreed native refinements rather than redesigning by default;
+7. validate the complete player-facing slice before moving on.
+
+Cross-cutting backend prerequisites may still be implemented first when several screens depend on them, but they should be driven by the next complete player-facing slice rather than accumulated for a distant UI phase.
 
 ## Source owners reviewed
 
@@ -34,7 +50,9 @@ The Phase 6 implementation was based on the pinned web source and its tests, inc
 - `js/data/contracts.js`;
 - source tests covering trade reserve, quality pricing and commercial behaviour.
 
-Both repository root `AGENTS.md` files were read before implementation and the Android contract was re-read during closeout.
+The UI-parity refinement additionally treats the corresponding `views/`, `css/` and `js/ui/` files as first-class migration references rather than merely styling inspiration.
+
+Both repository root `AGENTS.md` files were read before implementation and the Android contract was re-read during closeout and the migration-plan revision.
 
 ## Native ownership
 
@@ -49,7 +67,7 @@ Phase 6 keeps commercial truth out of Compose and splits the web application's c
 - `GameSession` remains the root state/persistence owner;
 - Compose renders commercial state and dispatches intent only.
 
-No parallel trade, buyer, contract or event implementation was introduced in UI state.
+No parallel trade, buyer, contract or event implementation was introduced in UI state. The UI refinement must continue to consume these same owners rather than creating layout-specific gameplay logic.
 
 ## Corporate Ship trade parity
 
@@ -77,7 +95,7 @@ Corporate Ship passenger transfer is migrated through the trade owner rather tha
 
 The current hard limits are preserved around passenger capacity, Housing and Power/service availability. Food is not treated as an additional hard transfer gate where the source presents it as a convenience/safety calculation instead. The native surface exposes the applicable safe/max transfer information while domain rules remain authoritative.
 
-This does not replace the later full player-fleet/passenger system planned for Phase 8.
+This does not replace the later full player-fleet/passenger system planned for the Ships/Expansion vertical slices.
 
 ## Contract lifecycle
 
@@ -123,7 +141,7 @@ Commercial blocking events use one durable queue with the current source priorit
 
 Equivalent event keys deduplicate rather than spawning parallel decisions. `CommercialDayService` returns whether the resulting state should pause so the application clock/UI can respond without embedding event truth in presentation.
 
-The production native commercial panel exposes Trade, Contract, Buyers and Game Log views using the Phase 5 design system. Game Log entries retain monotonic IDs and canonical game dates.
+The native commercial UI exposes Trade, Contract, Buyers and Game Log views. During the refinement pass these screens must be compared directly with the corresponding web views/CSS/controllers so their hierarchy and workflows remain recognisably MineIT rather than becoming generic Android dashboards.
 
 ## Daily orchestration
 
@@ -154,7 +172,7 @@ JavaScript compatibility remains isolated at the web-save importer boundary; no 
 
 ## Regression coverage
 
-Phase 6 regression coverage now includes the commercial foundation and the completed player-facing flows, including:
+Phase 6 regression coverage now includes the commercial foundation and the completed backend/player-flow rules, including:
 
 - first Corporate Ship arrival and next-visit scheduling;
 - pinned import/export visit capacities;
@@ -177,7 +195,9 @@ Phase 6 regression coverage now includes the commercial foundation and the compl
 - native v4→v5 compatibility and non-default v5 round-trip;
 - all earlier Phase 0–5 regression suites remaining active.
 
-## CI and validation checkpoint
+The UI refinement should add/strengthen interaction or screenshot coverage where needed, but gameplay assertions remain in domain tests.
+
+## CI and validation checkpoints
 
 Implementation checkpoint `9380c130c63ca540e2e778810ff0cac570cd48af` passed Android CI run `33897074590` (run 254):
 
@@ -188,18 +208,36 @@ Implementation checkpoint `9380c130c63ca540e2e778810ff0cac570cd48af` passed Andr
 - artifact ID: `9946197390`;
 - uploaded artifact ZIP digest: `sha256:d660804a5792f98684a7380ed4c5bb22acb084ac00fb027c0eae29d36cdf729f`.
 
-The documentation closeout changes made after that checkpoint must themselves receive exact-head CI before the APK is handed off for physical-device validation.
+The first completed documentation head `d977012bbe09b434df7088f4159693510e7af9ad` also passed exact-head Android CI run `33898301473` / run number `256`, and produced the `0.7.0-migration` validation APK.
 
-## Hands-on validation target
+That APK proved the commercial/backend integration was usable, but physical-device review identified excessive native layout drift. It is therefore a **feedback build, not the Phase 6 acceptance build**.
 
-Install `0.7.0-migration` over the accepted `0.6.0-migration` build rather than uninstalling it. This validates both normal application update signing and native v4→v5 save migration.
+## Hands-on feedback and revised completion target
 
-The physical-device pass should cover at least:
+Physical-device review of `0.7.0-migration` confirmed that the migrated functionality is moving in the right direction, but some screens were substantially more redesigned than intended. The Colony Details sheet in particular demonstrated a generic vertically stacked dashboard layout rather than preserving the compact web MineIT hierarchy.
 
-- existing Phase 5 save loads successfully;
+The agreed correction is:
+
+- keep the current canonical Phase 6 backend/domain implementation;
+- inspect the current web `develop` layout for Colony Details, Corporate Ship/Trade, Contract, Buyers and Game Log using their HTML/views, CSS and UI controllers;
+- retain the web screen hierarchy, compactness, primary control placement and recognisable workflows by default;
+- apply deliberate refinements where the current web UI is weak or inconsistent;
+- use native Android improvements for safe areas, accessibility, touch sizing, Back/navigation, sheets/dialogs and responsive sizing;
+- do not introduce a materially different layout merely because it is convenient in Compose.
+
+This refinement is the first application of the new UI-led vertical-slice migration method documented in `DESIGN_SYSTEM_DIRECTION.md` and the master migration guide.
+
+## Revised hands-on validation target
+
+The next Phase 6 validation build should be installed over the current `0.7.0-migration` build and should cover at least:
+
+- existing save loads successfully;
 - normal map/survey/building play remains intact;
-- commercial panel opens and Trade/Contract/Buyers/Game Log are usable;
-- Corporate Ship arrival/event can be observed or deterministically advanced to;
+- Colony Details is recognisably based on the web layout/information hierarchy while retaining useful native refinements;
+- Corporate Ship/Trade is recognisably based on the existing web flow;
+- Contract presentation preserves the existing hierarchy and decisions;
+- Buyers presentation preserves the existing offer/contract/collection workflow;
+- Game Log remains compact and coherent with the rest of MineIT;
 - buy/sell/reserve values update stock/cash correctly;
 - colonist transfer feedback/limits are coherent;
 - contract decision state is visible when due;
@@ -215,11 +253,16 @@ The physical-device pass should cover at least:
 - [x] Contract goal/deadline/decision/lifecycle rules migrated.
 - [x] Corporate event ordering/deduplication/recovery migrated.
 - [x] Buyer offers/contracts/recurring collections/relationship outcomes migrated.
-- [x] Game Log durable state and native presentation migrated.
+- [x] Game Log durable state and native presentation foundation migrated.
 - [x] Daily commercial orchestration uses completed-day simulation metrics.
 - [x] Native save v5 migration and non-default round-trip coverage added.
 - [x] `0.7.0-migration` code compiles, tests and builds with the persistent signer.
-- [ ] final documentation head passes full Android CI.
-- [ ] `0.7.0-migration` receives hands-on physical-device validation.
+- [x] initial `0.7.0-migration` exact documentation head passed full Android CI.
+- [x] initial physical-device review completed and UI-layout drift identified.
+- [ ] Colony Details reviewed/recreated from the web layout with deliberate refinements only.
+- [ ] Corporate Ship/Trade, Contract, Buyers and Game Log reviewed/recreated as complete UI-led vertical slices.
+- [ ] revised Phase 6 UI interaction/regression coverage passes.
+- [ ] revised Phase 6 exact head passes full Android CI and signer verification.
+- [ ] revised Phase 6 validation build receives hands-on physical-device acceptance.
 
-After hands-on acceptance, update this record and the master migration guide to accepted, fast-forward the exact accepted Phase 6 head to `main`, and only then begin Phase 7 from that baseline.
+Only after that acceptance should Phase 6 be marked complete/accepted and promoted to `main`. Phase 7 then begins from the exact accepted baseline using the same UI-led vertical-slice method.
