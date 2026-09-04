@@ -23,6 +23,16 @@ data class TradeQuote(
     val value: Double,
 )
 
+data class ColonistTransferProjection(
+    val supportedPopulationCapacity: Int,
+    val housingPowerRemaining: Int,
+    val passengerRemaining: Int,
+    val foodSupportedAdditional: Int,
+    val maxTransfer: Int,
+    val maxSafeTransfer: Int,
+    val unitCost: Double,
+)
+
 data class TradeActionResult(
     val state: com.mineit.android.domain.model.GameState,
     val ok: Boolean,
