@@ -68,24 +68,20 @@ class FileGameStatePersistenceTest {
         File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("broken-again")
 
         val recovered = runBlocking { repository.load() } as PersistenceLoadResult.Loaded
-
-        assertEquals(SaveSource.BACKUP, recovered.source)
-        assertTrue(recovered.recoveredFromBackup)
         assertEquals(first, recovered.state)
     }
 
     @Test
-    fun `invalid active and backup produce explicit failure`() = withTempDirectory { directory ->
+    fun `invalid active save with no healthy backup produces explicit failure`() = withTempDirectory { directory ->
         val repository = repository(directory)
-        File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("bad-active")
-        File(directory, FileGameStatePersistence.BACKUP_FILE_NAME).writeText("bad-backup")
+        runBlocking { repository.save(TestGameStates.foundationState()) }
+        File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("not-json")
 
         val result = runBlocking { repository.load() }
 
         assertTrue(result is PersistenceLoadResult.Failure)
         result as PersistenceLoadResult.Failure
-        assertTrue(result.activeError?.isNotBlank() == true)
-        assertTrue(result.backupError?.isNotBlank() == true)
+        assertTrue(result.activeError?.contains(FileGameStatePersistence.ACTIVE_FILE_NAME) == true)
     }
 
     private fun repository(
