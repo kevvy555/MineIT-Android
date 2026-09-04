@@ -1,17 +1,19 @@
 package com.mineit.android.domain.simulation
 
-import com.mineit.android.domain.colony.InfrastructureRules
+import com.mineit.android.domain.colony.ColonyNetworkService
+import com.mineit.android.domain.colony.ColonyNetworkSnapshot
+import com.mineit.android.domain.colony.HeadquartersContinuityPhase
+import com.mineit.android.domain.colony.HeadquartersService
 import com.mineit.android.domain.colony.TechnologyCapabilities
 import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
-import com.mineit.android.domain.resources.ExtractionCompatibility
 import com.mineit.android.domain.resources.ResourceCategory
-import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.ResourceDeposit
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.domain.world.Sustainability
+import com.mineit.android.domain.world.SurveyGameProcessResult
 import com.mineit.android.domain.world.SurveyGameService
 import com.mineit.android.domain.world.WorldTile
 import kotlin.math.ceil
@@ -19,52 +21,34 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.round
 
-/**
- * Canonical native owner for one MineIT colony day.
- *
- * The engine is pure Kotlin: it owns no timers, files, Android lifecycle objects or UI state.
- * Beginning-of-day Fuel semantics intentionally match the pinned web baseline: Power generation
- * and Fuel burn are calculated from Fuel available before the day's extraction is stored.
- */
+/** Canonical pure-Kotlin owner for one complete MineIT colony day. */
 class DailySimulationEngine(
     private val surveyGameService: SurveyGameService = SurveyGameService(),
+    private val networkService: ColonyNetworkService = ColonyNetworkService(),
+    private val headquartersService: HeadquartersService = HeadquartersService(),
 ) {
-    fun recalculate(state: GameState): ColonyMetrics = calculateMetrics(state.activeColony)
+    fun recalculate(state: GameState): ColonyMetrics = calculateMetrics(state, networkService.calculate(state))
 
     fun advanceDay(state: GameState): DailySimulationResult {
-        val colony = state.activeColony
-        if (colony.status == ColonyStatus.SITE_SELECTION) {
-            return DailySimulationResult(
-                state = state,
-                metrics = recalculate(state),
-                deaths = 0.0,
-                colonyDied = false,
-                completedSurveys = emptyList(),
-                depletedSites = emptyList(),
-                renewableEvents = emptyList(),
-            )
+        val initialColony = state.activeColony
+        if (initialColony.status == ColonyStatus.SITE_SELECTION) {
+            return DailySimulationResult(state, recalculate(state), 0.0, false, emptyList(), emptyList(), emptyList())
         }
-        if (colony.status == ColonyStatus.DEAD) {
+        if (initialColony.status == ColonyStatus.DEAD) {
             val next = state.copy(date = state.date.nextDay())
-            return DailySimulationResult(
-                state = next,
-                metrics = recalculate(next),
-                deaths = 0.0,
-                colonyDied = false,
-                completedSurveys = emptyList(),
-                depletedSites = emptyList(),
-                renewableEvents = emptyList(),
-            )
+            return DailySimulationResult(next, recalculate(next), 0.0, false, emptyList(), emptyList(), emptyList())
         }
 
-        // The Power network is deliberately frozen from beginning-of-day Fuel. New Fuel collected
-        // below can be stored and used tomorrow, but cannot retroactively increase today's output.
-        val fuelStockAtStart = colony.inventory.amountFor(ResourceCategory.FUEL)
-        val startNetwork = calculateNetworks(colony, fuelStockAtStart)
-        val collection = collect(colony, startNetwork)
-        var workingColony = collection.colony
+        // Power and all priority allocations are frozen from beginning-of-day Fuel. Fuel collected
+        // later in this method is stored for tomorrow and never retroactively increases today.
+        val fuelStockAtStart = initialColony.inventory.amountFor(ResourceCategory.FUEL)
+        val startNetwork = networkService.calculate(state, fuelStockAtStart)
+        var workingState = headquartersService.persistContinuity(state, startNetwork.continuity)
+        var workingColony = workingState.activeColony
+
+        val collection = collect(workingColony, startNetwork)
+        workingColony = collection.colony
         var inventory = workingColony.inventory
 
         val syntheticFood = syntheticFoodRate(workingColony)
@@ -80,10 +64,7 @@ class DailySimulationEngine(
         val demand = demand(workingColony, startNetwork)
         val foodUse = inventory.consumeCategory(ResourceCategory.FOOD, demand.foodDemand)
         inventory = foodUse.inventory
-        val fuelUse = inventory.consumeCategory(
-            ResourceCategory.FUEL,
-            min(demand.fuelDemand, fuelStockAtStart),
-        )
+        val fuelUse = inventory.consumeCategory(ResourceCategory.FUEL, min(demand.fuelDemand, fuelStockAtStart))
         inventory = fuelUse.inventory
         val oreUse = if (demand.oreDemand > 0.0) {
             inventory.consumeCategory(ResourceCategory.ORE, demand.oreDemand)
@@ -100,15 +81,14 @@ class DailySimulationEngine(
         var population = workingColony.population
         var deaths = 0.0
         if (stable < .7 && population > 0.0) {
-            val rate = mortalityRate(stable)
-            deaths = min(population, max(.05, population * rate))
+            deaths = min(population, max(.05, population * mortalityRate(stable)))
             population = max(0.0, population - deaths)
         }
         if (population < .5) population = 0.0
 
         var status = workingColony.status
         var contract = workingColony.contract
-        var reputation = state.company.reputation
+        var reputation = workingState.company.reputation
         val colonyDied = population <= 0.0 && status != ColonyStatus.DEAD
         if (colonyDied) {
             status = ColonyStatus.DEAD
@@ -124,37 +104,33 @@ class DailySimulationEngine(
             contract = contract,
             emergencyMode = if (colonyDied) false else workingColony.emergencyMode,
         )
-
-        var workingState = state.copy(
-            company = state.company.copy(reputation = reputation),
-            colonies = state.colonies.map { if (it.id == workingColony.id) workingColony else it },
+        workingState = workingState.copy(
+            company = workingState.company.copy(reputation = reputation),
+            colonies = workingState.colonies.map { if (it.id == workingColony.id) workingColony else it },
         )
 
         val surveyResult = if (colonyDied) {
-            com.mineit.android.domain.world.SurveyGameProcessResult(workingState, emptyList())
+            SurveyGameProcessResult(workingState, emptyList())
         } else {
-            surveyGameService.processSurveys(workingState)
+            surveyGameService.processSurveys(
+                state = workingState,
+                commandEfficiency = startNetwork.headquarters.efficiency,
+                headquartersContinuityFactor = startNetwork.continuity.efficiencyFactor,
+            )
         }
         workingState = surveyResult.state.copy(date = state.date.nextDay())
 
-        // Stocks/runways are useful as the new end-of-day state, but Power/Industry demand and
-        // delivery must describe the network that actually ran this day. Recalculating every
-        // network field from end-of-day Fuel would incorrectly let newly collected Fuel appear to
-        // have powered the day that produced it.
-        val endOfDayMetrics = calculateMetrics(workingState.activeColony)
-        val fuelSupplyForDay = if (demand.fuelDemand > 0.0) {
-            (fuelUse.consumed / demand.fuelDemand).coerceIn(0.0, 1.0)
-        } else {
-            1.0
-        }
+        // End-of-day stocks are current, while network/delivery fields describe the network that
+        // actually governed the completed day rather than a recalculation using newly produced Fuel.
+        val endMetrics = calculateMetrics(workingState, networkService.calculate(workingState))
+        val fuelSupplyForDay = if (demand.fuelDemand > 0.0) (fuelUse.consumed / demand.fuelDemand).coerceIn(0.0, 1.0) else 1.0
         val oreSupplyForDay = if (demand.oreDemand > 0.0) oreUse.ratio else 1.0
-        val industryFactorForDay = if (colonyDied || workingColony.emergencyMode) {
-            0.0
-        } else {
-            minOf(startNetwork.industryPowerFactor, oreSupplyForDay, startNetwork.industryStaffFactor)
-        }
-
-        val finalMetrics = endOfDayMetrics.copy(
+        val industryFactorForDay = if (colonyDied || workingColony.emergencyMode) 0.0 else minOf(
+            startNetwork.industryPowerFactor,
+            oreSupplyForDay,
+            startNetwork.industryStaffFactor,
+        )
+        val finalMetrics = endMetrics.copy(
             foodProduction = collection.production.food + syntheticFood,
             buildProduction = collection.production.build,
             fuelProduction = collection.production.fuel,
@@ -184,6 +160,15 @@ class DailySimulationEngine(
             workforceRequired = startNetwork.workforceRequired,
             workforceSurvivalFactor = startNetwork.workforceSurvivalFactor,
             workforceCommercialFactor = startNetwork.workforceCommercialFactor,
+            spaceportPowerFactor = if (colonyDied) 0.0 else startNetwork.spaceportPowerFactor,
+            commandCapacity = startNetwork.headquarters.capacity,
+            commandLoad = startNetwork.headquarters.load,
+            commandEfficiency = startNetwork.headquarters.efficiency,
+            headquartersContinuityFactor = startNetwork.continuity.efficiencyFactor,
+            headquartersPhase = startNetwork.continuity.phase,
+            primaryHeadquartersOperational = startNetwork.headquarters.primaryOperational,
+            headquartersNetworkAvailable = startNetwork.continuity.networkAvailable,
+            headquartersRecoveryDaysRemaining = startNetwork.continuity.recoveryDaysRemaining,
             lastDeaths = deaths,
             foodStarvationDays = starvationDays,
             survivalSupply = if (colonyDied) 0.0 else min(foodUse.ratio, startNetwork.lifeSupportPowerFactor),
@@ -200,7 +185,8 @@ class DailySimulationEngine(
         )
     }
 
-    private fun calculateMetrics(colony: ColonyState): ColonyMetrics {
+    private fun calculateMetrics(state: GameState, network: ColonyNetworkSnapshot): ColonyMetrics {
+        val colony = state.activeColony
         if (colony.status == ColonyStatus.SITE_SELECTION) {
             return ColonyMetrics(
                 foodStock = colony.inventory.amountFor(ResourceCategory.FOOD),
@@ -210,24 +196,20 @@ class DailySimulationEngine(
                 foodStarvationDays = colony.foodStarvationDays,
             )
         }
-
-        val fuelStock = colony.inventory.amountFor(ResourceCategory.FUEL)
-        val networks = calculateNetworks(colony, fuelStock)
-        val production = forecastProduction(colony, networks)
-        val demand = demand(colony, networks)
+        val production = forecastProduction(colony, network)
+        val currentDemand = demand(colony, network)
         val foodStock = colony.inventory.amountFor(ResourceCategory.FOOD)
         val buildStock = colony.inventory.amountFor(ResourceCategory.BUILD)
+        val fuelStock = colony.inventory.amountFor(ResourceCategory.FUEL)
         val oreStock = colony.inventory.amountFor(ResourceCategory.ORE)
-        val foodSupply = availableRatio(foodStock, production.food, demand.foodDemand)
-        val fuelSupply = if (demand.fuelDemand > 0.0) min(1.0, fuelStock / demand.fuelDemand) else 1.0
-        val oreSupply = availableRatio(oreStock, production.ore, demand.oreDemand)
-        val industryFactor = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) {
-            0.0
-        } else {
-            minOf(networks.industryPowerFactor, oreSupply, networks.industryStaffFactor)
-        }
-        val industry = networks.industryInstalled * industryFactor
-
+        val foodSupply = availableRatio(foodStock, production.food, currentDemand.foodDemand)
+        val fuelSupply = if (currentDemand.fuelDemand > 0.0) min(1.0, fuelStock / currentDemand.fuelDemand) else 1.0
+        val oreSupply = availableRatio(oreStock, production.ore, currentDemand.oreDemand)
+        val industryFactor = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) 0.0 else minOf(
+            network.industryPowerFactor,
+            oreSupply,
+            network.industryStaffFactor,
+        )
         return ColonyMetrics(
             foodProduction = production.food + syntheticFoodRate(colony),
             buildProduction = production.build,
@@ -237,287 +219,48 @@ class DailySimulationEngine(
             buildStock = buildStock,
             fuelStock = fuelStock,
             oreStock = oreStock,
-            foodDemand = demand.foodDemand,
-            fuelDemand = demand.fuelDemand,
-            oreDemand = demand.oreDemand,
+            foodDemand = currentDemand.foodDemand,
+            fuelDemand = currentDemand.fuelDemand,
+            oreDemand = currentDemand.oreDemand,
             foodSupply = foodSupply,
             fuelSupply = fuelSupply,
             oreSupply = oreSupply,
-            foodDays = supplyDays(foodStock, production.food, demand.foodDemand),
-            fuelDays = supplyDays(fuelStock, production.fuel, demand.fuelDemand),
-            oreDays = if (demand.oreDemand > 0.0) supplyDays(oreStock, production.ore, demand.oreDemand) else null,
-            powerDemand = networks.powerDemand,
-            powerCapacity = networks.powerCapacity,
-            powerFuelLimitedGeneration = networks.fuelLimitedGeneration,
-            powerFuelBurn = networks.fullFuelBurn,
-            powerFuelConsumed = 0.0,
-            powerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else networks.powerFactor,
-            lifeSupportPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else networks.lifeSupportPowerFactor,
-            industryPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else networks.industryPowerFactor,
-            industryInstalled = networks.industryInstalled,
-            industry = if (colony.status == ColonyStatus.DEAD) 0.0 else industry,
-            industryLoad = networks.industryLoad,
-            industrySurvivalFactor = networks.industrySurvivalFactor,
-            industryCommercialFactor = networks.industryCommercialFactor,
-            industryStaffFactor = networks.industryStaffFactor,
-            industryPopulationRequired = networks.industryPopulationRequired,
-            workforceAvailable = networks.workforceAvailable,
-            workforceRequired = networks.workforceRequired,
-            workforceSurvivalFactor = networks.workforceSurvivalFactor,
-            workforceCommercialFactor = networks.workforceCommercialFactor,
-            survivalSupply = if (colony.status == ColonyStatus.DEAD) 0.0 else min(foodSupply, networks.lifeSupportPowerFactor),
+            foodDays = supplyDays(foodStock, production.food, currentDemand.foodDemand),
+            fuelDays = supplyDays(fuelStock, production.fuel, currentDemand.fuelDemand),
+            oreDays = if (currentDemand.oreDemand > 0.0) supplyDays(oreStock, production.ore, currentDemand.oreDemand) else null,
+            powerDemand = network.powerDemand,
+            powerCapacity = network.powerCapacity,
+            powerFuelLimitedGeneration = network.fuelLimitedGeneration,
+            powerFuelBurn = network.fullFuelBurn,
+            powerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else network.powerFactor,
+            lifeSupportPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else network.lifeSupportPowerFactor,
+            industryPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else network.industryPowerFactor,
+            industryInstalled = network.industryInstalled,
+            industry = if (colony.status == ColonyStatus.DEAD) 0.0 else network.industryInstalled * industryFactor,
+            industryLoad = network.industryLoad,
+            industrySurvivalFactor = network.industrySurvivalFactor,
+            industryCommercialFactor = network.industryCommercialFactor,
+            industryStaffFactor = network.industryStaffFactor,
+            industryPopulationRequired = network.industryPopulationRequired,
+            workforceAvailable = network.workforceAvailable,
+            workforceRequired = network.workforceRequired,
+            workforceSurvivalFactor = network.workforceSurvivalFactor,
+            workforceCommercialFactor = network.workforceCommercialFactor,
+            survivalSupply = if (colony.status == ColonyStatus.DEAD) 0.0 else min(foodSupply, network.lifeSupportPowerFactor),
             foodStarvationDays = colony.foodStarvationDays,
+            spaceportPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else network.spaceportPowerFactor,
+            commandCapacity = network.headquarters.capacity,
+            commandLoad = network.headquarters.load,
+            commandEfficiency = network.headquarters.efficiency,
+            headquartersContinuityFactor = network.continuity.efficiencyFactor,
+            headquartersPhase = network.continuity.phase,
+            primaryHeadquartersOperational = network.headquarters.primaryOperational,
+            headquartersNetworkAvailable = network.continuity.networkAvailable,
+            headquartersRecoveryDaysRemaining = network.continuity.recoveryDaysRemaining,
         )
     }
 
-    private fun calculateNetworks(colony: ColonyState, fuelStock: Double): Networks {
-        val activeSites = activeSites(colony)
-        val workforce = workforceNetwork(colony, activeSites)
-        val industry = industryNetwork(colony, activeSites)
-        val power = powerNetwork(colony, activeSites, workforce, industry, fuelStock)
-        return Networks(
-            activeSites = activeSites,
-            workforceAvailable = workforce.available,
-            workforceRequired = workforce.required,
-            workforceSurvivalFactor = workforce.survivalFactor,
-            workforceCommercialFactor = workforce.commercialFactor,
-            industryInstalled = industry.installed,
-            industryCapacity = industry.capacity,
-            industryLoad = industry.load,
-            industrySurvivalFactor = industry.survivalFactor,
-            industryCommercialFactor = industry.commercialFactor,
-            industryStaffFactor = industry.staffFactor,
-            industryPopulationRequired = industry.populationRequired,
-            powerDemand = power.demand,
-            powerCapacity = power.capacity,
-            fullFuelBurn = power.fullFuelBurn,
-            fuelLimitedGeneration = power.fuelLimitedGeneration,
-            powerFactor = power.powerFactor,
-            lifeSupportPowerFactor = power.lifeSupportFactor,
-            industryPowerFactor = power.industryPowerFactor,
-            sitePowerFactors = power.siteFactors,
-        )
-    }
-
-    private fun activeSites(colony: ColonyState): List<WorldTile> {
-        if (colony.status == ColonyStatus.DEAD || colony.contract?.ended == true) return emptyList()
-        return colony.world.tiles.filter { tile ->
-            val development = tile.development
-            val deposit = tile.deposit
-            development?.kind == DevelopmentKind.EXTRACT &&
-                development.constructionComplete &&
-                !development.productionStopped &&
-                !tile.resourceExhausted &&
-                deposit != null &&
-                !deposit.renewableWiped &&
-                colony.technology.mining >= deposit.requiredMiningLevel &&
-                (!colony.emergencyMode || deposit.category == ResourceCategory.FOOD || deposit.category == ResourceCategory.FUEL)
-        }
-    }
-
-    private fun workforceNetwork(colony: ColonyState, sites: List<WorldTile>): WorkforceNetwork {
-        val available = if (colony.status == ColonyStatus.DEAD || colony.foodStarvationDays > 0) {
-            0.0
-        } else {
-            floor(colony.population * MineItConfig.WORKFORCE_SHARE)
-        }
-        var survivalRequired = 0.0
-        var commercialRequired = 0.0
-        for (tile in sites) {
-            val required = siteWorkforce(colony, tile)
-            val survival = tile.deposit?.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)
-            if (survival) survivalRequired += required else commercialRequired += required
-        }
-        val survivalFactor = if (survivalRequired > 0.0) (available / survivalRequired).coerceIn(0.0, 1.0) else 1.0
-        val remaining = max(0.0, available - survivalRequired)
-        val commercialFactor = if (colony.emergencyMode) 0.0 else if (commercialRequired > 0.0) {
-            (remaining / commercialRequired).coerceIn(0.0, 1.0)
-        } else 1.0
-        return WorkforceNetwork(
-            available = available,
-            required = survivalRequired + commercialRequired,
-            survivalFactor = survivalFactor,
-            commercialFactor = commercialFactor,
-        )
-    }
-
-    private fun siteWorkforce(colony: ColonyState, tile: WorldTile): Double {
-        val deposit = requireNotNull(tile.deposit)
-        val level = tile.development?.level ?: 1
-        val complexity = 1.0 + .18 * (deposit.requiredMiningLevel - 1)
-        val efficiency = if (deposit.category == ResourceCategory.FOOD) {
-            TechnologyCapabilities.foodWorkforceEfficiency(colony.technology)
-        } else {
-            TechnologyCapabilities.miningWorkforceEfficiency(colony.technology)
-        }
-        val intensity = if (
-            deposit.sustainability == Sustainability.RENEWABLE ||
-            deposit.category == ResourceCategory.FOOD ||
-            deposit.resourceId.value == "biomass" ||
-            deposit.resourceId.value == "fiber"
-        ) deposit.harvestIntensity.coerceIn(.25, 2.0) else 1.0
-        val intensityFactor = .5 + .5 * intensity
-        return max(
-            1.0,
-            ceil(
-                MineItConfig.SITE_WORKFORCE_BASE *
-                    MineItConfig.SITE_WORKFORCE_GROWTH.pow(level - 1) *
-                    complexity * efficiency * intensityFactor,
-            ),
-        )
-    }
-
-    private fun industryNetwork(colony: ColonyState, sites: List<WorldTile>): IndustryNetwork {
-        val installedBuildings = colony.world.tiles
-            .filter { it.development?.kind == DevelopmentKind.INDUSTRY && it.development.constructionComplete && !it.development.productionStopped }
-            .sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
-        val shipIndustry = if (colony.foundingShipDocked) InfrastructureRules.FOUNDING_SHIP_INDUSTRY else 0.0
-        val installed = installedBuildings + shipIndustry
-        val efficiency = TechnologyCapabilities.industryWorkforceEfficiency(colony.technology)
-        val populationRequired = max(40.0, round(installed * .8 * efficiency))
-        val staffFactor = (colony.population / max(1.0, populationRequired)).coerceIn(0.0, 1.0)
-        val capacity = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) 0.0 else installed * staffFactor
-
-        var survivalLoad = 0.0
-        var commercialLoad = 0.0
-        for (tile in sites) {
-            val level = tile.development?.level ?: 1
-            val load = round(MineItConfig.INDUSTRY_SITE_LOAD_BASE * MineItConfig.INDUSTRY_SITE_LOAD_GROWTH.pow(level - 1))
-            if (tile.deposit?.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) {
-                survivalLoad += load
-            } else {
-                commercialLoad += load
-            }
-        }
-        val survivalFactor = if (survivalLoad > 0.0) (capacity / survivalLoad).coerceIn(0.0, 1.0) else 1.0
-        val remaining = max(0.0, capacity - survivalLoad)
-        val commercialFactor = if (colony.emergencyMode) 0.0 else if (commercialLoad > 0.0) {
-            (remaining / commercialLoad).coerceIn(0.0, 1.0)
-        } else 1.0
-        return IndustryNetwork(
-            installed = installed,
-            capacity = capacity,
-            load = survivalLoad + commercialLoad,
-            survivalLoad = survivalLoad,
-            commercialLoad = commercialLoad,
-            survivalFactor = survivalFactor,
-            commercialFactor = commercialFactor,
-            staffFactor = staffFactor,
-            populationRequired = populationRequired,
-        )
-    }
-
-    private fun powerNetwork(
-        colony: ColonyState,
-        sites: List<WorldTile>,
-        workforce: WorkforceNetwork,
-        industry: IndustryNetwork,
-        fuelStock: Double,
-    ): PowerNetwork {
-        val powerBuildings = colony.world.tiles.filter {
-            it.development?.kind == DevelopmentKind.POWER &&
-                it.development.constructionComplete &&
-                !it.development.productionStopped
-        }
-        val capacity = powerBuildings.sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
-        val fuelIntensity = TechnologyCapabilities.fuelIntensity(colony.technology)
-        val fullFuelBurn = capacity * fuelIntensity
-        val fuelRatio = if (fullFuelBurn > 0.0) (fuelStock / fullFuelBurn).coerceIn(0.0, 1.0) else 0.0
-        val available = capacity * fuelRatio
-
-        val housingPower = colony.world.tiles
-            .filter {
-                it.development?.kind == DevelopmentKind.HOUSING &&
-                    it.development.constructionComplete &&
-                    !it.development.productionStopped
-            }
-            .sumOf { InfrastructureRules.housingFixedPower(requireNotNull(it.development).level) }
-        val lifeSupport = colony.population * MineItConfig.LIFE_SUPPORT_POWER_PER_COLONIST *
-            (colony.contract?.supportLoad ?: 1.0) *
-            (if (colony.emergencyMode) MineItConfig.EMERGENCY_LIFE_SUPPORT_MULTIPLIER else 1.0)
-
-        val industryRows = mutableListOf<PowerRequest>()
-        for (tile in colony.world.tiles) {
-            val development = tile.development ?: continue
-            if (development.kind != DevelopmentKind.INDUSTRY || !development.constructionComplete || development.productionStopped) continue
-            val installedCapacity = InfrastructureRules.capacity(development)
-            val idle = InfrastructureRules.industryIdlePower(development.level)
-            val variable = if (colony.emergencyMode) 0.0 else installedCapacity * industry.staffFactor * InfrastructureRules.INDUSTRY_VARIABLE_POWER_PER_CAPACITY
-            industryRows += PowerRequest("industry:${tile.coordinate.x},${tile.coordinate.y}", idle + variable)
-        }
-        if (colony.foundingShipDocked && !colony.emergencyMode) {
-            industryRows += PowerRequest(
-                "founding-ship-industry",
-                InfrastructureRules.FOUNDING_SHIP_INDUSTRY * industry.staffFactor * InfrastructureRules.INDUSTRY_VARIABLE_POWER_PER_CAPACITY,
-            )
-        }
-
-        val operationalIndustry = max(0.0, industry.capacity)
-        val survivalIndustry = min(operationalIndustry, industry.survivalLoad)
-        val survivalShare = if (operationalIndustry > 0.0) survivalIndustry / operationalIndustry else 0.0
-        val industrySurvival = industryRows.map { it.copy(id = "${it.id}:survival", requested = it.requested * survivalShare) }
-            .filter { it.requested > 0.0 }
-        val industryCommercial = industryRows.map { it.copy(id = "${it.id}:commercial", requested = it.requested * (1.0 - survivalShare)) }
-            .filter { it.requested > 0.0 }
-
-        val survivalSites = mutableListOf<PowerRequest>()
-        val commercialSites = mutableListOf<PowerRequest>()
-        for (tile in sites) {
-            val deposit = requireNotNull(tile.deposit)
-            val level = tile.development?.level ?: 1
-            val family = ExtractionCompatibility.familyFor(deposit.resourceId)
-            val row = PowerRequest(
-                id = siteId(tile),
-                requested = InfrastructureRules.facilityPower(family, level),
-            )
-            if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) survivalSites += row else commercialSites += row
-        }
-
-        var remaining = available
-        val siteFactors = mutableMapOf<String, Double>()
-
-        val lifeRequested = lifeSupport + housingPower
-        val lifeDelivered = min(remaining, lifeRequested)
-        val lifeFactor = if (lifeRequested > 0.0) lifeDelivered / lifeRequested else 1.0
-        remaining -= lifeDelivered
-
-        val survivalRows = survivalSites + industrySurvival
-        val survivalRequested = survivalRows.sumOf { it.requested }
-        val survivalDelivered = min(remaining, survivalRequested)
-        val survivalFactor = if (survivalRequested > 0.0) survivalDelivered / survivalRequested else 1.0
-        for (row in survivalSites) siteFactors[row.id] = survivalFactor
-        remaining -= survivalDelivered
-
-        val spaceportDelivered = if (remaining >= InfrastructureRules.BASIC_SPACEPORT_POWER) InfrastructureRules.BASIC_SPACEPORT_POWER else 0.0
-        remaining -= spaceportDelivered
-
-        val commercialRows = commercialSites + industryCommercial
-        val commercialRequested = commercialRows.sumOf { it.requested }
-        val commercialDelivered = min(remaining, commercialRequested)
-        val commercialFactor = if (commercialRequested > 0.0) commercialDelivered / commercialRequested else 1.0
-        for (row in commercialSites) siteFactors[row.id] = commercialFactor
-        remaining -= commercialDelivered
-
-        val industryRequested = industrySurvival.sumOf { it.requested } + industryCommercial.sumOf { it.requested }
-        val industryDelivered = industrySurvival.sumOf { it.requested * survivalFactor } +
-            industryCommercial.sumOf { it.requested * commercialFactor }
-        val industryPowerFactor = if (industryRequested > 0.0) industryDelivered / industryRequested else 1.0
-
-        val demand = lifeRequested + survivalRequested + InfrastructureRules.BASIC_SPACEPORT_POWER + commercialRequested
-        val delivered = available - max(0.0, remaining)
-        return PowerNetwork(
-            demand = demand,
-            capacity = capacity,
-            fullFuelBurn = fullFuelBurn,
-            fuelLimitedGeneration = available,
-            powerFactor = if (demand > 0.0) (delivered / demand).coerceIn(0.0, 1.0) else 1.0,
-            lifeSupportFactor = lifeFactor,
-            industryPowerFactor = industryPowerFactor,
-            siteFactors = siteFactors,
-        )
-    }
-
-    private fun collect(colony: ColonyState, networks: Networks): CollectionResult {
+    private fun collect(colony: ColonyState, network: ColonyNetworkSnapshot): CollectionResult {
         var inventory = colony.inventory
         var tiles = colony.world.tiles
         var food = 0.0
@@ -527,10 +270,10 @@ class DailySimulationEngine(
         val depleted = mutableListOf<SectorCoordinate>()
         val renewableEvents = mutableListOf<RenewableEvent>()
 
-        for (site in networks.activeSites) {
+        for (site in network.activeSites) {
             val current = tiles.first { it.coordinate == site.coordinate }
             val deposit = requireNotNull(current.deposit)
-            val rate = collectionRate(colony, current, networks)
+            val rate = collectionRate(colony, current, network)
             if (rate <= 0.0) continue
 
             val collected: Double
@@ -543,7 +286,7 @@ class DailySimulationEngine(
                 nextTile = current.copy(
                     deposit = deposit.copy(reserve = jsRoundToLong(nextReserve)),
                     resourceExhausted = exhausted,
-                    development = if (exhausted) null else current.development,
+                    exhaustedResourceId = if (exhausted) deposit.resourceId else current.exhaustedResourceId,
                 )
                 if (exhausted) depleted += current.coordinate
             } else {
@@ -555,12 +298,7 @@ class DailySimulationEngine(
             }
 
             if (collected > 0.0) {
-                inventory = inventory.store(
-                    resourceId = deposit.resourceId,
-                    category = deposit.category,
-                    amount = collected,
-                    quality = deposit.quality,
-                )
+                inventory = inventory.store(deposit.resourceId, deposit.category, collected, deposit.quality)
                 when (deposit.category) {
                     ResourceCategory.FOOD -> food += collected
                     ResourceCategory.BUILD -> build += collected
@@ -572,20 +310,20 @@ class DailySimulationEngine(
         }
 
         return CollectionResult(
-            colony = colony.copy(inventory = inventory, world = colony.world.copy(tiles = tiles)),
-            production = Production(food, build, fuel, ore),
-            depletedSites = depleted,
-            renewableEvents = renewableEvents,
+            colony.copy(inventory = inventory, world = colony.world.copy(tiles = tiles)),
+            Production(food, build, fuel, ore),
+            depleted,
+            renewableEvents,
         )
     }
 
-    private fun forecastProduction(colony: ColonyState, networks: Networks): Production {
+    private fun forecastProduction(colony: ColonyState, network: ColonyNetworkSnapshot): Production {
         var food = 0.0
         var build = 0.0
         var fuel = 0.0
         var ore = 0.0
-        for (tile in networks.activeSites) {
-            val rate = collectionRate(colony, tile, networks)
+        network.activeSites.forEach { tile ->
+            val rate = collectionRate(colony, tile, network)
             when (tile.deposit?.category) {
                 ResourceCategory.FOOD -> food += rate
                 ResourceCategory.BUILD -> build += rate
@@ -597,26 +335,19 @@ class DailySimulationEngine(
         return Production(food, build, fuel, ore)
     }
 
-    private fun collectionRate(colony: ColonyState, tile: WorldTile, networks: Networks): Double {
+    private fun collectionRate(colony: ColonyState, tile: WorldTile, network: ColonyNetworkSnapshot): Double {
         val deposit = requireNotNull(tile.deposit)
         val level = tile.development?.level ?: 1
-        val baseOutput = siteOutput(level)
         val potential = if (deposit.sustainability == Sustainability.RENEWABLE) {
-            baseOutput * renewableRateFactor(deposit.abundanceLabel) * deposit.terrainYieldFactor * deposit.harvestIntensity.coerceIn(.25, 2.0)
+            siteOutput(level) * renewableRateFactor(deposit.abundanceLabel) * deposit.terrainYieldFactor * deposit.harvestIntensity.coerceIn(.25, 2.0)
         } else {
-            baseOutput * finiteRateFactor(deposit.depositScale) * deposit.terrainYieldFactor
+            siteOutput(level) * finiteRateFactor(deposit.depositScale) * deposit.terrainYieldFactor
         }
-        val foodAdjusted = if (deposit.category == ResourceCategory.FOOD) {
-            potential * TechnologyCapabilities.foodProductionMultiplier(colony.technology)
-        } else potential
-        val workforce = if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) {
-            networks.workforceSurvivalFactor
-        } else networks.workforceCommercialFactor
-        val industry = if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) {
-            networks.industrySurvivalFactor
-        } else networks.industryCommercialFactor
-        val power = networks.sitePowerFactors[siteId(tile)] ?: 1.0
-        return max(0.0, foodAdjusted * workforce * industry * power)
+        val adjusted = if (deposit.category == ResourceCategory.FOOD) potential * TechnologyCapabilities.foodProductionMultiplier(colony.technology) else potential
+        val workforce = if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) network.workforceSurvivalFactor else network.workforceCommercialFactor
+        val industry = if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) network.industrySurvivalFactor else network.industryCommercialFactor
+        val power = network.sitePowerFactors[siteId(tile)] ?: 1.0
+        return max(0.0, adjusted * workforce * industry * power * network.continuity.effectiveCommandEfficiency)
     }
 
     private fun updateRenewable(tile: WorldTile): RenewableUpdate {
@@ -626,15 +357,12 @@ class DailySimulationEngine(
         val intensity = deposit.harvestIntensity.coerceIn(.25, 2.0)
         val beforeLabel = deposit.abundanceLabel ?: "Established"
         val maxScore = originalRank + 1.0
-        if (intensity > 1.0) {
-            health = max(0.0, health - MineItConfig.RENEWABLE_OVERHARVEST_RATE * (intensity - 1.0))
-        } else if (intensity < 1.0) {
-            health = min(maxScore, health + MineItConfig.RENEWABLE_RECOVERY_RATE * (1.0 - intensity))
-        }
+        if (intensity > 1.0) health = max(0.0, health - MineItConfig.RENEWABLE_OVERHARVEST_RATE * (intensity - 1.0))
+        else if (intensity < 1.0) health = min(maxScore, health + MineItConfig.RENEWABLE_RECOVERY_RATE * (1.0 - intensity))
         if (health <= 0.0) {
             val next = tile.copy(
                 resourceExhausted = true,
-                development = null,
+                exhaustedResourceId = deposit.resourceId,
                 deposit = deposit.copy(
                     renewableOriginalRank = originalRank,
                     renewableHealth = 0.0,
@@ -646,35 +374,23 @@ class DailySimulationEngine(
         }
         val afterRank = min(originalRank, max(0, ceil(health).toInt() - 1))
         val afterLabel = renewableLabel(afterRank)
-        val next = tile.copy(
-            deposit = deposit.copy(
-                renewableOriginalRank = originalRank,
-                renewableHealth = health,
-                abundanceLabel = afterLabel,
-                abundance = renewableRateFactor(afterLabel),
-            ),
-        )
-        val event = if (afterLabel != beforeLabel) RenewableEvent(tile.coordinate, beforeLabel, afterLabel) else null
-        return RenewableUpdate(next, event)
+        val next = tile.copy(deposit = deposit.copy(
+            renewableOriginalRank = originalRank,
+            renewableHealth = health,
+            abundanceLabel = afterLabel,
+            abundance = renewableRateFactor(afterLabel),
+        ))
+        return RenewableUpdate(next, if (afterLabel != beforeLabel) RenewableEvent(tile.coordinate, beforeLabel, afterLabel) else null)
     }
 
-    private fun demand(colony: ColonyState, networks: Networks): Demand {
-        val foodDemand = if (colony.status == ColonyStatus.DEAD || colony.population <= 0.0) {
-            0.0
-        } else {
-            max(.1, colony.population * MineItConfig.FOOD_PER_COLONIST)
-        }
-        val staffedIndustry = if (colony.emergencyMode) 0.0 else networks.industryInstalled * networks.industryStaffFactor
+    private fun demand(colony: ColonyState, network: ColonyNetworkSnapshot): Demand {
+        val foodDemand = if (colony.status == ColonyStatus.DEAD || colony.population <= 0.0) 0.0 else max(.1, colony.population * MineItConfig.FOOD_PER_COLONIST)
+        val staffedIndustry = if (colony.emergencyMode) 0.0 else network.industryInstalled * network.industryStaffFactor
         val oreDemand = if (colony.emergencyMode) 0.0 else max(
             .05,
-            staffedIndustry * (MineItConfig.ORE_PER_INDUSTRY_LEVEL / 100.0) *
-                TechnologyCapabilities.industryOreEfficiency(colony.technology),
+            staffedIndustry * (MineItConfig.ORE_PER_INDUSTRY_LEVEL / 100.0) * TechnologyCapabilities.industryOreEfficiency(colony.technology),
         )
-        return Demand(
-            foodDemand = foodDemand,
-            fuelDemand = networks.fullFuelBurn,
-            oreDemand = oreDemand,
-        )
+        return Demand(foodDemand, network.fullFuelBurn, oreDemand)
     }
 
     private fun syntheticFoodRate(colony: ColonyState): Double {
@@ -685,8 +401,7 @@ class DailySimulationEngine(
     private fun siteOutput(level: Int): Double {
         val normalized = max(1, level)
         if (normalized <= MineItConfig.SITE_OUTPUT_LEVELS.size) return MineItConfig.SITE_OUTPUT_LEVELS[normalized - 1]
-        val last = MineItConfig.SITE_OUTPUT_LEVELS.last()
-        return last * 1.24.pow(normalized - MineItConfig.SITE_OUTPUT_LEVELS.size)
+        return MineItConfig.SITE_OUTPUT_LEVELS.last() * 1.24.pow(normalized - MineItConfig.SITE_OUTPUT_LEVELS.size)
     }
 
     private fun availableRatio(stock: Double, production: Double, demand: Double): Double =
@@ -701,118 +416,27 @@ class DailySimulationEngine(
         if (stable >= .7) return 0.0
         if (stable >= .4) {
             val t = (.7 - stable) / .3
-            return MineItConfig.CRITICAL_MORTALITY_MIN +
-                t * (MineItConfig.CRITICAL_MORTALITY_MAX - MineItConfig.CRITICAL_MORTALITY_MIN)
+            return MineItConfig.CRITICAL_MORTALITY_MIN + t * (MineItConfig.CRITICAL_MORTALITY_MAX - MineItConfig.CRITICAL_MORTALITY_MIN)
         }
         val t = (.4 - max(0.0, stable)) / .4
-        return MineItConfig.CRITICAL_MORTALITY_MAX +
-            t * (MineItConfig.COLLAPSE_MORTALITY_MAX - MineItConfig.CRITICAL_MORTALITY_MAX)
+        return MineItConfig.CRITICAL_MORTALITY_MAX + t * (MineItConfig.COLLAPSE_MORTALITY_MAX - MineItConfig.CRITICAL_MORTALITY_MAX)
     }
 
     private fun finiteRateFactor(label: String?): Double = when (label?.lowercase()) {
-        "small" -> .75
-        "modest" -> .90
-        "large" -> 1.05
-        "huge" -> 1.20
-        "colossal" -> 1.35
-        else -> 1.0
+        "small" -> .75; "modest" -> .90; "large" -> 1.05; "huge" -> 1.20; "colossal" -> 1.35; else -> 1.0
     }
-
-    private fun renewableRank(label: String?): Int = when (label?.lowercase()) {
-        "limited" -> 0
-        "large" -> 2
-        "vast" -> 3
-        else -> 1
-    }
-
+    private fun renewableRank(label: String?): Int = when (label?.lowercase()) { "limited" -> 0; "large" -> 2; "vast" -> 3; else -> 1 }
     private fun renewableLabel(rank: Int): String = listOf("Limited", "Established", "Large", "Vast")[rank.coerceIn(0, 3)]
+    private fun renewableRateFactor(label: String?): Double = when (label?.lowercase()) { "limited" -> .65; "large" -> 1.45; "vast" -> 2.10; else -> 1.0 }
+    private fun siteId(tile: WorldTile) = "site:${tile.coordinate.x},${tile.coordinate.y}"
+    private fun jsRoundToLong(value: Double) = floor(value + .5).toLong()
 
-    private fun renewableRateFactor(label: String?): Double = when (label?.lowercase()) {
-        "limited" -> .65
-        "large" -> 1.45
-        "vast" -> 2.10
-        else -> 1.0
-    }
-
-    private fun siteId(tile: WorldTile): String = "site:${tile.coordinate.x},${tile.coordinate.y}"
-
-    private fun jsRoundToLong(value: Double): Long = floor(value + .5).toLong()
-
-    private data class WorkforceNetwork(
-        val available: Double,
-        val required: Double,
-        val survivalFactor: Double,
-        val commercialFactor: Double,
-    )
-
-    private data class IndustryNetwork(
-        val installed: Double,
-        val capacity: Double,
-        val load: Double,
-        val survivalLoad: Double,
-        val commercialLoad: Double,
-        val survivalFactor: Double,
-        val commercialFactor: Double,
-        val staffFactor: Double,
-        val populationRequired: Double,
-    )
-
-    private data class PowerRequest(val id: String, val requested: Double)
-
-    private data class PowerNetwork(
-        val demand: Double,
-        val capacity: Double,
-        val fullFuelBurn: Double,
-        val fuelLimitedGeneration: Double,
-        val powerFactor: Double,
-        val lifeSupportFactor: Double,
-        val industryPowerFactor: Double,
-        val siteFactors: Map<String, Double>,
-    )
-
-    private data class Networks(
-        val activeSites: List<WorldTile>,
-        val workforceAvailable: Double,
-        val workforceRequired: Double,
-        val workforceSurvivalFactor: Double,
-        val workforceCommercialFactor: Double,
-        val industryInstalled: Double,
-        val industryCapacity: Double,
-        val industryLoad: Double,
-        val industrySurvivalFactor: Double,
-        val industryCommercialFactor: Double,
-        val industryStaffFactor: Double,
-        val industryPopulationRequired: Double,
-        val powerDemand: Double,
-        val powerCapacity: Double,
-        val fullFuelBurn: Double,
-        val fuelLimitedGeneration: Double,
-        val powerFactor: Double,
-        val lifeSupportPowerFactor: Double,
-        val industryPowerFactor: Double,
-        val sitePowerFactors: Map<String, Double>,
-    )
-
-    private data class Demand(
-        val foodDemand: Double,
-        val fuelDemand: Double,
-        val oreDemand: Double,
-    )
-
+    private data class Demand(val foodDemand: Double, val fuelDemand: Double, val oreDemand: Double)
     private data class Production(val food: Double, val build: Double, val fuel: Double, val ore: Double)
-
-    private data class CollectionResult(
-        val colony: ColonyState,
-        val production: Production,
-        val depletedSites: List<SectorCoordinate>,
-        val renewableEvents: List<RenewableEvent>,
-    )
-
+    private data class CollectionResult(val colony: ColonyState, val production: Production, val depletedSites: List<SectorCoordinate>, val renewableEvents: List<RenewableEvent>)
     private data class RenewableUpdate(val tile: WorldTile, val event: RenewableEvent?)
 
-    companion object {
-        private const val STARVATION_GRACE_DAYS = 30
-    }
+    companion object { private const val STARVATION_GRACE_DAYS = 30 }
 }
 
 data class ColonyMetrics(
@@ -855,14 +479,18 @@ data class ColonyMetrics(
     val survivalSupply: Double = 1.0,
     val foodStarvationDays: Int = 0,
     val lastDeaths: Double = 0.0,
+    val spaceportPowerFactor: Double = 0.0,
+    val commandCapacity: Double = 0.0,
+    val commandLoad: Double = 0.0,
+    val commandEfficiency: Double = 1.0,
+    val headquartersContinuityFactor: Double = 1.0,
+    val headquartersPhase: HeadquartersContinuityPhase = HeadquartersContinuityPhase.ONLINE,
+    val primaryHeadquartersOperational: Boolean = false,
+    val headquartersNetworkAvailable: Boolean = true,
+    val headquartersRecoveryDaysRemaining: Int = 0,
 )
 
-data class RenewableEvent(
-    val coordinate: SectorCoordinate,
-    val from: String,
-    val to: String,
-)
-
+data class RenewableEvent(val coordinate: SectorCoordinate, val from: String, val to: String)
 data class DailySimulationResult(
     val state: GameState,
     val metrics: ColonyMetrics,
