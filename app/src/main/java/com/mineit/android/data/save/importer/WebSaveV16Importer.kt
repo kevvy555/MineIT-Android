@@ -18,8 +18,8 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 /**
- * Boundary parser for the current web save schema. It deliberately returns an import preview rather than
- * pretending Phase 1 can already map every web subsystem into the still-growing native GameState.
+ * Boundary parser for the current web save schema. It returns an import preview and grows only as native
+ * semantic owners become available; JavaScript compatibility fields never become the canonical GameState.
  */
 class WebSaveV16Importer {
     private val json = Json { ignoreUnknownKeys = true }
@@ -46,9 +46,11 @@ class WebSaveV16Importer {
         }) { "Web save active colony is missing from portfolio." }
 
         val company = requireObject(root, "company")
+        val contract = requireObject(root, "contract")
         val inventory = parseInventory(requireObject(root, "inventory"))
+        val tiles = requireObject(root, "tiles")
         val colonyName = findActiveColonyName(colonies, activeColonyId)
-            ?: root["contract"]?.jsonObject?.get("colonyName")?.jsonPrimitive?.content
+            ?: contract["colonyName"]?.jsonPrimitive?.content
             ?: "Imported Colony"
 
         return WebSaveV16ImportPreview(
@@ -67,6 +69,13 @@ class WebSaveV16Importer {
             companyReputation = optionalInt(company, "rep") ?: 0,
             colonyCount = colonies.size,
             activeInventory = inventory,
+            contractArchetypeId = requireString(contract, "arch"),
+            tileCount = tiles.size,
+            revealedTileCount = tiles.values.count { element ->
+                (element as? JsonObject)?.get("revealed")?.jsonPrimitive?.content == "true"
+            },
+            activeSurveyCount = requireArray(root, "scans").size,
+            surveyQueueCount = requireArray(root, "scanQueue").size,
         )
     }
 
@@ -165,4 +174,9 @@ data class WebSaveV16ImportPreview(
     val companyReputation: Int,
     val colonyCount: Int,
     val activeInventory: Inventory,
+    val contractArchetypeId: String,
+    val tileCount: Int,
+    val revealedTileCount: Int,
+    val activeSurveyCount: Int,
+    val surveyQueueCount: Int,
 )
