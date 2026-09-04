@@ -10,6 +10,8 @@ import java.io.File
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +66,32 @@ class GameSessionTest {
         assertEquals(SaveSource.ACTIVE, restarted.diagnostics.value.loadedFrom)
         assertEquals(false, restarted.diagnostics.value.recoveredFromBackup)
         assertEquals("0.2.0-migration", restarted.diagnostics.value.saveMetadata?.gameVersion)
+    }
+
+    @Test
+    fun `reset starts a fresh authoritative state and clears previous load history`() = withTempDirectory { directory ->
+        val original = GameSession(
+            initialState = TestGameStates.foundationState(cash = 500),
+            persistence = repository(directory),
+        )
+        runBlocking { original.persistCurrentState() }
+
+        val restarted = GameSession(
+            initialState = TestGameStates.foundationState(cash = 1),
+            persistence = repository(directory),
+        )
+        runBlocking { restarted.restoreFromPersistence() }
+        assertEquals(SaveSource.ACTIVE, restarted.diagnostics.value.loadedFrom)
+
+        val fresh = TestGameStates.foundationState(cash = 32_000)
+        val reset = runBlocking { restarted.reset("new-game", fresh) }
+
+        assertTrue(reset.persistence is PersistenceSaveResult.Success)
+        assertEquals(fresh, restarted.state.value)
+        assertEquals("new-game", restarted.diagnostics.value.lastAction)
+        assertEquals(PersistenceState.SAVED, restarted.diagnostics.value.persistenceState)
+        assertNull(restarted.diagnostics.value.loadedFrom)
+        assertFalse(restarted.diagnostics.value.recoveredFromBackup)
     }
 
     private fun repository(directory: File) = FileGameStatePersistence(
