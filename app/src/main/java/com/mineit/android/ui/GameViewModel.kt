@@ -12,6 +12,7 @@ import com.mineit.android.domain.colony.DevelopmentActionResult
 import com.mineit.android.domain.colony.DevelopmentPreview
 import com.mineit.android.domain.colony.HeadquartersDepartureGate
 import com.mineit.android.domain.colony.SpaceportStatus
+import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.simulation.DailySimulationResult
@@ -21,6 +22,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+
+enum class GameScreen {
+    MAIN_MENU,
+    GAME,
+}
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val composition = AppComposition(application)
@@ -34,6 +40,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val spaceportService = composition.spaceportService
 
     val state: StateFlow<GameState> = session.state
+
+    private val _screen = MutableStateFlow(GameScreen.MAIN_MENU)
+    val screen: StateFlow<GameScreen> = _screen.asStateFlow()
+
+    private val _entryReady = MutableStateFlow(false)
+    val entryReady: StateFlow<Boolean> = _entryReady.asStateFlow()
+
+    private val _canContinue = MutableStateFlow(false)
+    val canContinue: StateFlow<Boolean> = _canContinue.asStateFlow()
 
     private val _metrics = MutableStateFlow(dailySimulationEngine.recalculate(state.value))
     val metrics: StateFlow<ColonyMetrics> = _metrics.asStateFlow()
@@ -60,21 +75,57 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         simulationClock.start()
         viewModelScope.launch {
             when (val result = session.restoreFromPersistence()) {
-                PersistenceLoadResult.NotFound -> refreshDerived(state.value)
+                PersistenceLoadResult.NotFound -> {
+                    refreshDerived(state.value)
+                    _canContinue.value = false
+                    _statusMessage.value = null
+                }
                 is PersistenceLoadResult.Loaded -> {
                     refreshDerived(result.state)
-                    _statusMessage.value = if (result.recoveredFromBackup) {
-                        "Recovered the native save from the previous-good backup."
-                    } else {
-                        "Loaded native migration save."
+                    val colonyLost = result.state.activeColony.status == ColonyStatus.DEAD
+                    _canContinue.value = !colonyLost
+                    _statusMessage.value = when {
+                        colonyLost -> "Previous colony was lost. Start a new game to begin again."
+                        result.recoveredFromBackup -> "Recovered the native save from the previous-good backup."
+                        else -> null
                     }
                 }
                 is PersistenceLoadResult.Failure -> {
                     refreshDerived(state.value)
-                    _statusMessage.value = "Save restore failed; using the fresh Contract 01 validation state."
+                    _canContinue.value = false
+                    _statusMessage.value = "Save restore failed. Start a new game to replace the unusable save."
                 }
             }
+            _screen.value = GameScreen.MAIN_MENU
+            _entryReady.value = true
         }
+    }
+
+    fun startNewGame() {
+        if (!_entryReady.value) return
+        viewModelScope.launch {
+            simulationClock.setSpeed(0)
+            val freshState = composition.createNewGame()
+            val result = session.reset("new-game", freshState)
+            _selectedSector.value = null
+            refreshDerived(result.state)
+            _canContinue.value = result.persistence is PersistenceSaveResult.Success
+            _screen.value = GameScreen.GAME
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
+                "New Contract 01 game started. Choose a landing site."
+            } else {
+                "New game started, but the native save could not be written."
+            }
+        }
+    }
+
+    fun continueGame() {
+        if (!_entryReady.value || !_canContinue.value || state.value.activeColony.status == ColonyStatus.DEAD) return
+        simulationClock.setSpeed(0)
+        _selectedSector.value = null
+        refreshDerived(state.value)
+        _screen.value = GameScreen.GAME
+        _statusMessage.value = null
     }
 
     fun selectLandingSite(index: Int) {
@@ -198,12 +249,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         val result = requireNotNull(simulationResult)
         refreshDerived(commit.state, completedDayMetrics = result.metrics)
+
+        if (result.colonyDied) {
+            simulationClock.setSpeed(0)
+            _selectedSector.value = null
+            _canContinue.value = false
+            _screen.value = GameScreen.MAIN_MENU
+            _statusMessage.value = if (commit.persistence is PersistenceSaveResult.Success) {
+                "Colony lost. Start a new game to begin again."
+            } else {
+                "Colony lost. The final save write failed; start a new game to begin again."
+            }
+            return
+        }
+
         if (commit.persistence is PersistenceSaveResult.Failure) {
             _statusMessage.value = "Day advanced, but the native save could not be written."
             return
         }
         _statusMessage.value = when {
-            result.colonyDied -> "COLONY LOST • population reached zero."
             result.deaths > .0001 -> "Life-support shortage caused ${formatPopulation(result.deaths)} deaths this day."
             result.completedSurveys.isNotEmpty() -> "Survey completed for ${result.completedSurveys.joinToString { "${it.x},${it.y}" }}."
             !fromClock -> "Advanced one complete MineIT simulation day."
