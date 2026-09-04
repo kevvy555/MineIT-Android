@@ -56,15 +56,17 @@ Advancing a day currently consumes Food and Water and produces Ore. A power shor
 
 ## Build
 
-Current toolchain:
+Current stable POC toolchain:
 
 - Android Gradle Plugin 9.3.0
 - Kotlin 2.3.21
-- Jetpack Compose BOM 2026.08.00
-- compile/target SDK 37
+- Jetpack Compose BOM 2026.06.00
+- compile/target SDK 36
 - JDK 17
 
-GitHub Actions runs unit tests and builds `app-debug.apk` on pushes to `main` and feature branches.
+API 37 / Android 17 remains a preview SDK at the time this POC was created, so the POC deliberately uses stable API 36 rather than taking a preview-platform dependency.
+
+GitHub Actions runs unit tests and builds `app-debug.apk` on pushes to `main` and feature branches. Superseded builds on the same branch are cancelled to avoid wasting CI minutes.
 
 ## If the POC is accepted
 
