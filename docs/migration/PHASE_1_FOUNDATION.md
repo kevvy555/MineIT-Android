@@ -1,10 +1,13 @@
 # MineIT Android Migration — Phase 1 Native State and Persistence Foundation
 
 **Phase:** 1 — Native state and persistence foundation  
-**Status:** In Progress  
+**Status:** Complete  
 **Started:** 4 September 2026  
+**Completed:** 4 September 2026  
 **Source behavioural baseline:** `kevvy555/MineIT` commit `9e58983adaa7a15cd525451266ce9df3c17ae886`, game `5.13.15`, web save `16`  
-**Android branch:** `feature/migration-phase-1`
+**Android branch:** `feature/migration-phase-1`  
+**Validated implementation head:** `71d60fa3799025452bcca15253d4535563f3bcda`  
+**Validation:** Android CI run `33850400762` — success
 
 ## Source reviewed before implementation
 
@@ -186,7 +189,7 @@ Phase 1 adds tests for:
 
 ## Phase 1 exit gate
 
-Phase 1 will be complete when:
+Phase 1 is complete:
 
 - [x] canonical `GameState` and selected value/ID types exist;
 - [x] generic resource identity/quantity/quality foundation exists without resource-catalogue redesign;
@@ -198,5 +201,9 @@ Phase 1 will be complete when:
 - [x] explicit native migration chain exists;
 - [x] obvious transient UI/session state is excluded from the initial durable root;
 - [x] initial save/schema/source diagnostics exist;
-- [ ] Android CI passes the final Phase 1 branch head;
-- [ ] installable `0.2.0-migration` APK is produced with the existing persistent development signer.
+- [x] Android CI passed unit tests, APK assembly, signer verification and artifact upload on the implementation head;
+- [x] `0.2.0-migration` / version code `5` is configured with the existing persistent development signer.
+
+## Next phase
+
+Phase 2 can now replace illustrative POC data with real MineIT Contract 01 definitions: typed configuration, current resource catalogue on the generic inventory foundation, seeded world/tile generation, survey discovery rules and parity fixtures. It should preserve the current resource economy while continuing to avoid the later resource-overhaul redesign.
