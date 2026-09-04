@@ -4,6 +4,7 @@ import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
+import com.mineit.android.domain.ships.PlayerFleetService
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.SectorCoordinate
 import kotlin.math.floor
@@ -11,10 +12,17 @@ import kotlin.math.max
 import kotlin.math.min
 
 /** Canonical native owner for A08a/A08b Headquarters command and continuity semantics. */
-class HeadquartersService {
-    fun baseWorkforceAvailable(colony: ColonyState): Double = if (
-        colony.status == ColonyStatus.DEAD || colony.foodStarvationDays > 0
-    ) 0.0 else floor(colony.population * MineItConfig.WORKFORCE_SHARE)
+class HeadquartersService(
+    private val fleetService: PlayerFleetService = PlayerFleetService(),
+) {
+    fun baseWorkforceAvailable(state: GameState): Double {
+        val colony = state.activeColony
+        return if (colony.status == ColonyStatus.DEAD || colony.foodStarvationDays > 0) {
+            0.0
+        } else {
+            floor(fleetService.planetaryResidentCount(state) * MineItConfig.WORKFORCE_SHARE)
+        }
+    }
 
     fun synchronizePrimary(state: GameState): GameState {
         val colony = state.activeColony
@@ -24,8 +32,8 @@ class HeadquartersService {
             identity = identity.copy(primary = null, primaryEverAssigned = true)
         }
         if (identity.primary == null && !identity.primaryEverAssigned) {
-            val provisional = staffing(colony.copy(headquarters = identity), null)
-                .firstOrNull { it.staffed && it.constructed }
+            val provisionalState = state.withActiveColony(colony.copy(headquarters = identity))
+            val provisional = staffing(provisionalState, null).firstOrNull { it.staffed && it.constructed }
             if (provisional != null) {
                 identity = identity.copy(primary = provisional.coordinate, primaryEverAssigned = true)
             }
@@ -36,7 +44,7 @@ class HeadquartersService {
     fun setPrimary(state: GameState, coordinate: SectorCoordinate): HeadquartersActionResult {
         val synced = synchronizePrimary(state)
         val colony = synced.activeColony
-        val row = staffing(colony, colony.headquarters.primary).firstOrNull { it.coordinate == coordinate }
+        val row = staffing(synced, colony.headquarters.primary).firstOrNull { it.coordinate == coordinate }
         if (row == null || !row.constructed || !row.staffed) {
             return HeadquartersActionResult(false, state, "Primary Headquarters must be fully constructed and staffed.")
         }
@@ -52,7 +60,7 @@ class HeadquartersService {
     ): HeadquartersNetwork {
         val colony = state.activeColony
         val primary = colony.headquarters.primary
-        var rows = staffing(colony, primary).map { row ->
+        var rows = staffing(state, primary).map { row ->
             row.copy(
                 powered = row.coordinate in poweredHeadquarters,
                 primary = row.coordinate == primary,
@@ -60,7 +68,7 @@ class HeadquartersService {
         }
         val primaryRow = rows.firstOrNull { it.coordinate == primary }
         val primaryOperational = primaryRow?.let { it.constructed && it.staffed && it.powered } == true
-        val shipAvailable = colony.foundingShipDocked
+        val shipAvailable = fleetService.hasCommandShip(state)
         val sourceType = when {
             primaryOperational -> CommandSourceType.HEADQUARTERS
             shipAvailable -> CommandSourceType.SHIP
@@ -213,7 +221,7 @@ class HeadquartersService {
         val colony = state.activeColony
         if (colony.headquarters.commandHandoverComplete) return HeadquartersDepartureGate(true, emptyList())
         val primary = colony.headquarters.primary
-        val row = staffing(colony, primary).firstOrNull { it.coordinate == primary }
+        val row = staffing(state, primary).firstOrNull { it.coordinate == primary }
         val failures = buildList {
             if (primary == null || row == null) add("Primary Headquarters is required.")
             else {
@@ -233,7 +241,8 @@ class HeadquartersService {
         )
     }
 
-    private fun staffing(colony: ColonyState, primary: SectorCoordinate?): List<HeadquartersRow> {
+    private fun staffing(state: GameState, primary: SectorCoordinate?): List<HeadquartersRow> {
+        val colony = state.activeColony
         val raw = headquartersTiles(colony).map { tile ->
             val level = tile.development!!.level
             HeadquartersRow(
@@ -253,7 +262,7 @@ class HeadquartersService {
             primaryRow?.let(::add)
             addAll(raw.filterNot { it.coordinate == primary }.sortedWith(compareByDescending<HeadquartersRow> { it.level }.thenBy { it.coordinate.x }.thenBy { it.coordinate.y }))
         }
-        var remaining = baseWorkforceAvailable(colony)
+        var remaining = baseWorkforceAvailable(state)
         val staffed = mutableSetOf<SectorCoordinate>()
         for (row in ordered) {
             if (!row.constructed || remaining < row.requiredStaff) continue

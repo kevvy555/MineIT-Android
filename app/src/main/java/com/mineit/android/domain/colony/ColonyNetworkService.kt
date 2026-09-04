@@ -6,6 +6,7 @@ import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.resources.ExtractionCompatibility
 import com.mineit.android.domain.resources.ResourceCategory
+import com.mineit.android.domain.ships.PlayerFleetService
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.domain.world.WorldTile
@@ -15,19 +16,20 @@ import kotlin.math.min
 import kotlin.math.round
 
 /**
- * Canonical derived colony network owner. Phase 4 moves shared workforce/Industry/Power/HQ
- * calculations here so simulation, construction gates and UI consume one result.
+ * Canonical derived colony network owner. Workforce and planetary demand use residents ashore;
+ * docked ship Industry/command support remains self-contained and is never charged to colony Power.
  */
 class ColonyNetworkService(
-    private val headquartersService: HeadquartersService = HeadquartersService(),
+    private val fleetService: PlayerFleetService = PlayerFleetService(),
+    private val headquartersService: HeadquartersService = HeadquartersService(fleetService),
 ) {
     fun calculate(state: GameState, fuelStock: Double = state.activeColony.inventory.amountFor(ResourceCategory.FUEL)): ColonyNetworkSnapshot {
         val colony = state.activeColony
         if (colony.status == ColonyStatus.SITE_SELECTION) return ColonyNetworkSnapshot.empty()
         val sites = activeSites(colony)
         val hqStaffing = headquartersService.network(state, emptySet())
-        val workforce = workforce(colony, sites, hqStaffing.reservedStaff)
-        val industry = industry(colony, sites)
+        val workforce = workforce(state, colony, sites, hqStaffing.reservedStaff)
+        val industry = industry(state, colony, sites)
         val power = power(state, sites, workforce, industry, fuelStock)
         val hq = headquartersService.network(state, power.poweredHeadquarters)
         val continuity = headquartersService.continuity(state, hq)
@@ -39,6 +41,8 @@ class ColonyNetworkService(
             workforceCommercialFactor = workforce.commercialFactor,
             industryInstalled = industry.installed,
             industryCapacity = industry.capacity,
+            shipIndustry = industry.shipSupport,
+            builtIndustry = industry.built,
             industryLoad = industry.load,
             industrySurvivalFactor = industry.survivalFactor,
             industryCommercialFactor = industry.commercialFactor,
@@ -76,8 +80,9 @@ class ColonyNetworkService(
         }
     }
 
-    private fun workforce(colony: ColonyState, sites: List<WorldTile>, hqReserved: Double): Workforce {
-        val base = if (colony.status == ColonyStatus.DEAD || colony.foodStarvationDays > 0) 0.0 else floor(colony.population * MineItConfig.WORKFORCE_SHARE)
+    private fun workforce(state: GameState, colony: ColonyState, sites: List<WorldTile>, hqReserved: Double): Workforce {
+        val planetaryResidents = fleetService.planetaryResidentCount(state, colony.id)
+        val base = if (colony.status == ColonyStatus.DEAD || colony.foodStarvationDays > 0) 0.0 else floor(planetaryResidents * MineItConfig.WORKFORCE_SHARE)
         val available = max(0.0, base - hqReserved)
         var survivalRequired = 0.0
         var commercialRequired = 0.0
@@ -91,14 +96,18 @@ class ColonyNetworkService(
         return Workforce(available, survivalRequired + commercialRequired, survivalFactor, commercialFactor)
     }
 
-    private fun industry(colony: ColonyState, sites: List<WorldTile>): Industry {
-        val buildingCapacity = colony.world.tiles.filter {
+    private fun industry(state: GameState, colony: ColonyState, sites: List<WorldTile>): Industry {
+        val built = colony.world.tiles.filter {
             it.development?.kind == DevelopmentKind.INDUSTRY && it.development.constructionComplete && !it.development.productionStopped
         }.sumOf { InfrastructureRules.capacity(requireNotNull(it.development)) }
-        val installed = buildingCapacity + if (colony.foundingShipDocked) InfrastructureRules.FOUNDING_SHIP_INDUSTRY else 0.0
-        val populationRequired = max(40.0, round(installed * .8 * TechnologyCapabilities.industryWorkforceEfficiency(colony.technology)))
-        val staffFactor = (colony.population / max(1.0, populationRequired)).coerceIn(0.0, 1.0)
-        val capacity = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) 0.0 else installed * staffFactor
+        val shipSupport = fleetService.industrySupport(state, colony.id)
+        val installed = built + shipSupport
+        val populationRequired = if (built > .0001) {
+            max(40.0, round(built * .8 * TechnologyCapabilities.industryWorkforceEfficiency(colony.technology)))
+        } else 0.0
+        val planetaryResidents = fleetService.planetaryResidentCount(state, colony.id)
+        val staffFactor = if (populationRequired > .0001) (planetaryResidents / populationRequired).coerceIn(0.0, 1.0) else 1.0
+        val capacity = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) 0.0 else shipSupport + built * staffFactor
         var survivalLoad = 0.0
         var commercialLoad = 0.0
         sites.forEach { tile ->
@@ -108,7 +117,7 @@ class ColonyNetworkService(
         val survivalFactor = if (survivalLoad > 0) (capacity / survivalLoad).coerceIn(0.0, 1.0) else 1.0
         val remaining = max(0.0, capacity - survivalLoad)
         val commercialFactor = if (colony.emergencyMode) 0.0 else if (commercialLoad > 0) (remaining / commercialLoad).coerceIn(0.0, 1.0) else 1.0
-        return Industry(installed, capacity, survivalLoad + commercialLoad, survivalLoad, commercialLoad, survivalFactor, commercialFactor, staffFactor, populationRequired)
+        return Industry(installed, capacity, shipSupport, built, survivalLoad + commercialLoad, survivalLoad, commercialLoad, survivalFactor, commercialFactor, staffFactor, populationRequired)
     }
 
     private fun power(
@@ -137,7 +146,7 @@ class ColonyNetworkService(
         )
         var remaining = available
         val poweredHq = mutableSetOf<SectorCoordinate>()
-        var commandConnected = colony.foundingShipDocked
+        var commandConnected = fleetService.hasCommandShip(state, colony.id)
         for (row in orderedHq) {
             if (!row.constructed || !row.staffed) continue
             if (row.coordinate != primary && !commandConnected) continue
@@ -153,7 +162,8 @@ class ColonyNetworkService(
         val housingPower = colony.world.tiles.filter {
             it.development?.kind == DevelopmentKind.HOUSING && it.development.constructionComplete && !it.development.productionStopped
         }.sumOf { InfrastructureRules.housingFixedPower(requireNotNull(it.development).level) }
-        val lifeSupport = colony.population * MineItConfig.LIFE_SUPPORT_POWER_PER_COLONIST *
+        val planetaryResidents = fleetService.planetaryResidentCount(state, colony.id)
+        val lifeSupport = planetaryResidents * MineItConfig.LIFE_SUPPORT_POWER_PER_COLONIST *
             (colony.contract?.supportLoad ?: 1.0) *
             (if (colony.emergencyMode) MineItConfig.EMERGENCY_LIFE_SUPPORT_MULTIPLIER else 1.0)
         val lifeRequested = housingPower + lifeSupport
@@ -161,7 +171,7 @@ class ColonyNetworkService(
         val lifeFactor = if (lifeRequested > 0) lifeDelivered / lifeRequested else 1.0
         remaining -= lifeDelivered
 
-        val industryRows = mutableListOf<Pair<Double, Boolean>>()
+        val industryRows = mutableListOf<Double>()
         colony.world.tiles.filter {
             it.development?.kind == DevelopmentKind.INDUSTRY && it.development.constructionComplete && !it.development.productionStopped
         }.forEach { tile ->
@@ -169,12 +179,10 @@ class ColonyNetworkService(
             val installedCapacity = InfrastructureRules.capacity(dev)
             val idle = InfrastructureRules.industryIdlePower(dev.level)
             val variable = if (colony.emergencyMode) 0.0 else installedCapacity * industry.staffFactor * InfrastructureRules.INDUSTRY_VARIABLE_POWER_PER_CAPACITY
-            industryRows += (idle + variable) to false
+            industryRows += idle + variable
         }
-        if (colony.foundingShipDocked && !colony.emergencyMode) {
-            industryRows += (InfrastructureRules.FOUNDING_SHIP_INDUSTRY * industry.staffFactor * InfrastructureRules.INDUSTRY_VARIABLE_POWER_PER_CAPACITY) to false
-        }
-        val industryTotal = industryRows.sumOf { it.first }
+        // N05: ship Industry is crewed and self-powered; it creates no planetary Power demand.
+        val industryTotal = industryRows.sum()
         val operationalIndustry = max(0.0, industry.capacity)
         val survivalIndustry = min(operationalIndustry, industry.survivalLoad)
         val survivalShare = if (operationalIndustry > 0) survivalIndustry / operationalIndustry else 0.0
@@ -228,6 +236,8 @@ class ColonyNetworkService(
     private data class Industry(
         val installed: Double,
         val capacity: Double,
+        val shipSupport: Double,
+        val built: Double,
         val load: Double,
         val survivalLoad: Double,
         val commercialLoad: Double,
@@ -258,6 +268,8 @@ data class ColonyNetworkSnapshot(
     val workforceCommercialFactor: Double,
     val industryInstalled: Double,
     val industryCapacity: Double,
+    val shipIndustry: Double,
+    val builtIndustry: Double,
     val industryLoad: Double,
     val industrySurvivalFactor: Double,
     val industryCommercialFactor: Double,
@@ -313,6 +325,8 @@ data class ColonyNetworkSnapshot(
                 workforceCommercialFactor = 1.0,
                 industryInstalled = 0.0,
                 industryCapacity = 0.0,
+                shipIndustry = 0.0,
+                builtIndustry = 0.0,
                 industryLoad = 0.0,
                 industrySurvivalFactor = 1.0,
                 industryCommercialFactor = 1.0,

@@ -6,6 +6,8 @@ import com.mineit.android.domain.contracts.ContractState
 import com.mineit.android.domain.events.CorporateEventQueueState
 import com.mineit.android.domain.logging.GameLogState
 import com.mineit.android.domain.resources.Inventory
+import com.mineit.android.domain.ships.FleetState
+import com.mineit.android.domain.ships.ShipResidentAssignment
 import com.mineit.android.domain.trade.TradeState
 import com.mineit.android.domain.world.WorldState
 import kotlinx.serialization.SerialName
@@ -17,6 +19,7 @@ data class GameState(
     val company: CompanyState,
     val colonies: List<ColonyState>,
     val activeColonyId: ColonyId,
+    val fleet: FleetState = FleetState(),
     val corporateEvents: CorporateEventQueueState = CorporateEventQueueState(),
     val gameLog: GameLogState = GameLogState(),
 ) {
@@ -76,6 +79,7 @@ enum class ColonyStatus {
 data class ColonyState(
     val id: ColonyId,
     val name: String,
+    /** Total living colony residents, including residents temporarily accommodated aboard local ships. */
     val population: Double,
     val seed: Long,
     val inventory: Inventory = Inventory(),
@@ -84,23 +88,31 @@ data class ColonyState(
     val technology: TechnologyLevels = TechnologyLevels(),
     val world: WorldState = WorldState(),
     val emergencyMode: Boolean = false,
+    /** Planetary-resident starvation only; occupied ships own their own Food/starvation state. */
     val foodStarvationDays: Int = 0,
     val headquarters: HeadquartersIdentityState = HeadquartersIdentityState(),
     val trade: TradeState = TradeState(),
     val tradeReserve: Double = 0.0,
-    /**
-     * Durable staged ownership until the full ship domain is migrated. It represents the
-     * canonical founding ship being physically docked at this colony and therefore able
-     * to provide its current 50 Industry support and temporary/emergency command capability.
-     * Phase 8 will migrate this fact into the full fleet model.
-     */
-    val foundingShipDocked: Boolean = true,
+    val foundingShipId: ShipId? = null,
+    val shipResidentAssignments: List<ShipResidentAssignment> = emptyList(),
+    val planetaryAccommodationResidents: Double = population,
+    val establishmentAcknowledged: Boolean = true,
+    val initialManifestProvisioned: Boolean = true,
 ) {
     init {
         require(name.isNotBlank()) { "Colony name must not be blank." }
         require(population.isFinite() && population >= 0.0) { "Colony population must not be negative." }
         require(foodStarvationDays >= 0) { "Food starvation days must not be negative." }
         require(tradeReserve.isFinite() && tradeReserve >= 0.0) { "Trade reserve must be finite and non-negative." }
+        require(planetaryAccommodationResidents.isFinite() && planetaryAccommodationResidents >= 0.0) {
+            "Planetary accommodation residents must be finite and non-negative."
+        }
+        require(shipResidentAssignments.map { it.shipId }.distinct().size == shipResidentAssignments.size) {
+            "A colony may contain only one resident assignment for each ship."
+        }
+        require(shipResidentAssignments.sumOf { it.residents } <= population + .0001) {
+            "Ship resident assignments cannot exceed colony population."
+        }
         require(contract == null || contract.uid == id.value) { "Colony contract uid must match the colony id." }
     }
 }

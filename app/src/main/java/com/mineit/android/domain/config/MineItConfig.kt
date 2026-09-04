@@ -14,8 +14,12 @@ object MineItConfig {
     const val START_INDUSTRY_LEVEL = 1
     const val START_FOOD = 1_300.0
     const val START_BUILD = 520.0
-    const val START_FUEL = 420.0
+    const val START_FUEL = 675.0
     const val START_ORE = 260.0
+    const val FOUNDING_SHIP_CREW = 10
+    const val FOUNDING_SHIP_INDUSTRY = 50.0
+    const val SHIP_FOOD_WARNING_DAYS = 30.0
+    const val SHIP_FOOD_CRITICAL_DAYS = 10.0
 
     const val MAX_CONTRACT_EXTENSIONS = 3
     const val RENEWAL_YEARS = 5

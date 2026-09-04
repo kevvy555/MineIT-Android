@@ -9,8 +9,9 @@ import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
+import com.mineit.android.domain.model.ShipId
 import com.mineit.android.domain.resources.ResourceCategory
-import com.mineit.android.domain.world.ResourceDeposit
+import com.mineit.android.domain.ships.PlayerFleetService
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.domain.world.Sustainability
 import com.mineit.android.domain.world.SurveyGameProcessResult
@@ -25,8 +26,9 @@ import kotlin.math.pow
 /** Canonical pure-Kotlin owner for one complete MineIT colony day. */
 class DailySimulationEngine(
     private val surveyGameService: SurveyGameService = SurveyGameService(),
-    private val networkService: ColonyNetworkService = ColonyNetworkService(),
-    private val headquartersService: HeadquartersService = HeadquartersService(),
+    private val fleetService: PlayerFleetService = PlayerFleetService(),
+    private val networkService: ColonyNetworkService = ColonyNetworkService(fleetService),
+    private val headquartersService: HeadquartersService = HeadquartersService(fleetService),
 ) {
     fun recalculate(state: GameState): ColonyMetrics = calculateMetrics(state, networkService.calculate(state))
 
@@ -61,7 +63,17 @@ class DailySimulationEngine(
             )
         }
 
-        val demand = demand(workingColony, startNetwork)
+        workingColony = workingColony.copy(inventory = inventory)
+        workingState = workingState.withActiveColony(workingColony)
+
+        // N05: residents accommodated aboard ships consume ship Food before planetary demand is
+        // processed. Their starvation counter is owned by the ship, never by the colony pantry.
+        val shipFoodUse = fleetService.consumeResidentFood(workingState)
+        workingState = shipFoodUse.state
+        workingColony = workingState.activeColony
+        inventory = workingColony.inventory
+
+        val demand = demand(workingState, workingColony, startNetwork)
         val foodUse = inventory.consumeCategory(ResourceCategory.FOOD, demand.foodDemand)
         inventory = foodUse.inventory
         val fuelUse = inventory.consumeCategory(ResourceCategory.FUEL, min(demand.fuelDemand, fuelStockAtStart))
@@ -79,12 +91,46 @@ class DailySimulationEngine(
         val stable = min(foodMortalityFactor, startNetwork.lifeSupportPowerFactor)
 
         var population = workingColony.population
-        var deaths = 0.0
-        if (stable < .7 && population > 0.0) {
-            deaths = min(population, max(.05, population * mortalityRate(stable)))
-            population = max(0.0, population - deaths)
+        var planetaryDeaths = 0.0
+        val planetaryBefore = fleetService.planetaryResidentCount(workingState)
+        if (stable < .7 && planetaryBefore > 0.0) {
+            planetaryDeaths = min(planetaryBefore, max(.05, planetaryBefore * mortalityRate(stable)))
+            population = max(0.0, population - planetaryDeaths)
         }
         if (population < .5) population = 0.0
+
+        val nextPlanetaryAccommodation = min(
+            workingColony.planetaryAccommodationResidents,
+            max(0.0, population - workingColony.shipResidentAssignments.sumOf { it.residents }),
+        )
+        workingColony = workingColony.copy(
+            population = population,
+            inventory = inventory,
+            foodStarvationDays = starvationDays,
+            planetaryAccommodationResidents = nextPlanetaryAccommodation,
+        )
+        workingState = workingState.withActiveColony(workingColony)
+
+        val shipLosses = buildMap<ShipId, Double> {
+            shipFoodUse.rows.forEach { row ->
+                val shipStable = if (row.consumed <= .0001 && row.starvationDays <= STARVATION_GRACE_DAYS) 1.0 else row.ratio
+                if (shipStable < .7 && row.residents > 0.0) {
+                    put(row.shipId, min(row.residents, max(.05, row.residents * mortalityRate(shipStable))))
+                }
+            }
+        }
+        val beforeShipDeaths = workingState.activeColony.population
+        workingState = fleetService.applyResidentDeaths(workingState, shipLosses)
+        val shipDeaths = max(0.0, beforeShipDeaths - workingState.activeColony.population)
+        var deaths = planetaryDeaths + shipDeaths
+        workingColony = workingState.activeColony
+        population = workingColony.population
+        if (population < .5 && population > 0.0) {
+            deaths += population
+            population = 0.0
+            workingColony = workingColony.copy(population = 0.0)
+            workingState = workingState.withActiveColony(workingColony)
+        }
 
         var status = workingColony.status
         var contract = workingColony.contract
@@ -98,8 +144,6 @@ class DailySimulationEngine(
 
         workingColony = workingColony.copy(
             population = population,
-            inventory = inventory,
-            foodStarvationDays = starvationDays,
             status = status,
             contract = contract,
             emergencyMode = if (colonyDied) false else workingColony.emergencyMode,
@@ -125,11 +169,11 @@ class DailySimulationEngine(
         val endMetrics = calculateMetrics(workingState, networkService.calculate(workingState))
         val fuelSupplyForDay = if (demand.fuelDemand > 0.0) (fuelUse.consumed / demand.fuelDemand).coerceIn(0.0, 1.0) else 1.0
         val oreSupplyForDay = if (demand.oreDemand > 0.0) oreUse.ratio else 1.0
-        val industryFactorForDay = if (colonyDied || workingColony.emergencyMode) 0.0 else minOf(
-            startNetwork.industryPowerFactor,
-            oreSupplyForDay,
-            startNetwork.industryStaffFactor,
-        )
+        val poweredIndustryForDay = startNetwork.shipIndustry +
+            startNetwork.builtIndustry * startNetwork.industryStaffFactor * startNetwork.industryPowerFactor
+        val industryForDay = if (colonyDied || workingColony.emergencyMode) 0.0 else
+            poweredIndustryForDay * oreSupplyForDay * startNetwork.continuity.efficiencyFactor
+        val shipFoodStatus = fleetService.residentFoodStatus(workingState)
         val finalMetrics = endMetrics.copy(
             foodProduction = collection.production.food + syntheticFood,
             buildProduction = collection.production.build,
@@ -150,7 +194,7 @@ class DailySimulationEngine(
             lifeSupportPowerFactor = if (colonyDied) 0.0 else startNetwork.lifeSupportPowerFactor,
             industryPowerFactor = if (colonyDied) 0.0 else startNetwork.industryPowerFactor,
             industryInstalled = startNetwork.industryInstalled,
-            industry = startNetwork.industryInstalled * industryFactorForDay,
+            industry = industryForDay,
             industryLoad = startNetwork.industryLoad,
             industrySurvivalFactor = startNetwork.industrySurvivalFactor,
             industryCommercialFactor = startNetwork.industryCommercialFactor,
@@ -172,6 +216,16 @@ class DailySimulationEngine(
             lastDeaths = deaths,
             foodStarvationDays = starvationDays,
             survivalSupply = if (colonyDied) 0.0 else min(foodUse.ratio, startNetwork.lifeSupportPowerFactor),
+            planetaryResidents = fleetService.planetaryResidentCount(workingState),
+            shipResidents = workingState.activeColony.shipResidentAssignments.sumOf { it.residents },
+            shipFoodDemand = shipFoodUse.requested,
+            shipFoodConsumed = shipFoodUse.consumed,
+            shipFoodAvailable = shipFoodStatus.available,
+            shipFoodSupply = shipFoodUse.ratio,
+            shipFoodShortestDays = shipFoodStatus.shortestDays,
+            shipFoodWarning = shipFoodStatus.shortestDays?.let { it <= MineItConfig.SHIP_FOOD_WARNING_DAYS } == true,
+            shipFoodCritical = shipFoodStatus.shortestDays?.let { it < MineItConfig.SHIP_FOOD_CRITICAL_DAYS } == true,
+            shipFoodDeaths = shipDeaths,
         )
 
         return DailySimulationResult(
@@ -187,6 +241,9 @@ class DailySimulationEngine(
 
     private fun calculateMetrics(state: GameState, network: ColonyNetworkSnapshot): ColonyMetrics {
         val colony = state.activeColony
+        val shipFood = fleetService.residentFoodStatus(state)
+        val planetaryResidents = fleetService.planetaryResidentCount(state)
+        val shipResidents = colony.shipResidentAssignments.sumOf { it.residents }
         if (colony.status == ColonyStatus.SITE_SELECTION) {
             return ColonyMetrics(
                 foodStock = colony.inventory.amountFor(ResourceCategory.FOOD),
@@ -194,10 +251,18 @@ class DailySimulationEngine(
                 fuelStock = colony.inventory.amountFor(ResourceCategory.FUEL),
                 oreStock = colony.inventory.amountFor(ResourceCategory.ORE),
                 foodStarvationDays = colony.foodStarvationDays,
+                planetaryResidents = planetaryResidents,
+                shipResidents = shipResidents,
+                shipFoodDemand = shipFood.requested,
+                shipFoodAvailable = shipFood.available,
+                shipFoodSupply = shipFood.ratio,
+                shipFoodShortestDays = shipFood.shortestDays,
+                shipFoodWarning = shipFood.shortestDays?.let { it <= MineItConfig.SHIP_FOOD_WARNING_DAYS } == true,
+                shipFoodCritical = shipFood.shortestDays?.let { it < MineItConfig.SHIP_FOOD_CRITICAL_DAYS } == true,
             )
         }
         val production = forecastProduction(colony, network)
-        val currentDemand = demand(colony, network)
+        val currentDemand = demand(state, colony, network)
         val foodStock = colony.inventory.amountFor(ResourceCategory.FOOD)
         val buildStock = colony.inventory.amountFor(ResourceCategory.BUILD)
         val fuelStock = colony.inventory.amountFor(ResourceCategory.FUEL)
@@ -205,11 +270,9 @@ class DailySimulationEngine(
         val foodSupply = availableRatio(foodStock, production.food, currentDemand.foodDemand)
         val fuelSupply = if (currentDemand.fuelDemand > 0.0) min(1.0, fuelStock / currentDemand.fuelDemand) else 1.0
         val oreSupply = availableRatio(oreStock, production.ore, currentDemand.oreDemand)
-        val industryFactor = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) 0.0 else minOf(
-            network.industryPowerFactor,
-            oreSupply,
-            network.industryStaffFactor,
-        )
+        val poweredIndustry = network.shipIndustry + network.builtIndustry * network.industryStaffFactor * network.industryPowerFactor
+        val effectiveIndustry = if (colony.status == ColonyStatus.DEAD || colony.emergencyMode) 0.0 else
+            poweredIndustry * oreSupply * network.continuity.efficiencyFactor
         return ColonyMetrics(
             foodProduction = production.food + syntheticFoodRate(colony),
             buildProduction = production.build,
@@ -236,7 +299,7 @@ class DailySimulationEngine(
             lifeSupportPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else network.lifeSupportPowerFactor,
             industryPowerFactor = if (colony.status == ColonyStatus.DEAD) 0.0 else network.industryPowerFactor,
             industryInstalled = network.industryInstalled,
-            industry = if (colony.status == ColonyStatus.DEAD) 0.0 else network.industryInstalled * industryFactor,
+            industry = effectiveIndustry,
             industryLoad = network.industryLoad,
             industrySurvivalFactor = network.industrySurvivalFactor,
             industryCommercialFactor = network.industryCommercialFactor,
@@ -257,6 +320,14 @@ class DailySimulationEngine(
             primaryHeadquartersOperational = network.headquarters.primaryOperational,
             headquartersNetworkAvailable = network.continuity.networkAvailable,
             headquartersRecoveryDaysRemaining = network.continuity.recoveryDaysRemaining,
+            planetaryResidents = planetaryResidents,
+            shipResidents = shipResidents,
+            shipFoodDemand = shipFood.requested,
+            shipFoodAvailable = shipFood.available,
+            shipFoodSupply = shipFood.ratio,
+            shipFoodShortestDays = shipFood.shortestDays,
+            shipFoodWarning = shipFood.shortestDays?.let { it <= MineItConfig.SHIP_FOOD_WARNING_DAYS } == true,
+            shipFoodCritical = shipFood.shortestDays?.let { it < MineItConfig.SHIP_FOOD_CRITICAL_DAYS } == true,
         )
     }
 
@@ -383,9 +454,10 @@ class DailySimulationEngine(
         return RenewableUpdate(next, if (afterLabel != beforeLabel) RenewableEvent(tile.coordinate, beforeLabel, afterLabel) else null)
     }
 
-    private fun demand(colony: ColonyState, network: ColonyNetworkSnapshot): Demand {
-        val foodDemand = if (colony.status == ColonyStatus.DEAD || colony.population <= 0.0) 0.0 else max(.1, colony.population * MineItConfig.FOOD_PER_COLONIST)
-        val staffedIndustry = if (colony.emergencyMode) 0.0 else network.industryInstalled * network.industryStaffFactor
+    private fun demand(state: GameState, colony: ColonyState, network: ColonyNetworkSnapshot): Demand {
+        val planetaryResidents = fleetService.planetaryResidentCount(state, colony.id)
+        val foodDemand = if (colony.status == ColonyStatus.DEAD || planetaryResidents <= 0.0) 0.0 else max(.1, planetaryResidents * MineItConfig.FOOD_PER_COLONIST)
+        val staffedIndustry = if (colony.emergencyMode) 0.0 else network.industryCapacity
         val oreDemand = if (colony.emergencyMode) 0.0 else max(
             .05,
             staffedIndustry * (MineItConfig.ORE_PER_INDUSTRY_LEVEL / 100.0) * TechnologyCapabilities.industryOreEfficiency(colony.technology),
@@ -430,6 +502,9 @@ class DailySimulationEngine(
     private fun renewableRateFactor(label: String?): Double = when (label?.lowercase()) { "limited" -> .65; "large" -> 1.45; "vast" -> 2.10; else -> 1.0 }
     private fun siteId(tile: WorldTile) = "site:${tile.coordinate.x},${tile.coordinate.y}"
     private fun jsRoundToLong(value: Double) = floor(value + .5).toLong()
+
+    private fun GameState.withActiveColony(updated: ColonyState): GameState =
+        copy(colonies = colonies.map { if (it.id == updated.id) updated else it })
 
     private data class Demand(val foodDemand: Double, val fuelDemand: Double, val oreDemand: Double)
     private data class Production(val food: Double, val build: Double, val fuel: Double, val ore: Double)
@@ -488,6 +563,16 @@ data class ColonyMetrics(
     val primaryHeadquartersOperational: Boolean = false,
     val headquartersNetworkAvailable: Boolean = true,
     val headquartersRecoveryDaysRemaining: Int = 0,
+    val planetaryResidents: Double = 0.0,
+    val shipResidents: Double = 0.0,
+    val shipFoodDemand: Double = 0.0,
+    val shipFoodConsumed: Double = 0.0,
+    val shipFoodAvailable: Double = 0.0,
+    val shipFoodSupply: Double = 1.0,
+    val shipFoodShortestDays: Double? = null,
+    val shipFoodWarning: Boolean = false,
+    val shipFoodCritical: Boolean = false,
+    val shipFoodDeaths: Double = 0.0,
 )
 
 data class RenewableEvent(val coordinate: SectorCoordinate, val from: String, val to: String)

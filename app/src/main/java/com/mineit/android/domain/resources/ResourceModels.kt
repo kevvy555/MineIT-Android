@@ -72,6 +72,12 @@ data class ResourceConsumption(
         get() = if (requested > 0.0) (consumed / requested).coerceIn(0.0, 1.0) else 1.0
 }
 
+data class ResourceWithdrawal(
+    val requested: Double,
+    val stock: ResourceStock?,
+    val inventory: Inventory,
+)
+
 @Serializable
 data class Inventory(
     val resources: List<ResourceStock> = emptyList(),
@@ -98,20 +104,59 @@ data class Inventory(
         quality: Int,
     ): Inventory {
         if (!amount.isFinite() || amount <= 0.0) return this
-        val band = ResourceQuality.forQuality(quality).band
-        val existing = find(resourceId)
-        require(existing == null || existing.category == category) {
-            "Resource ${resourceId.value} cannot change inventory category."
+        return store(ResourceStock(resourceId, category, mapOf(ResourceQuality.forQuality(quality).band to amount)))
+    }
+
+    /** Merge an exact stock lot, preserving every quality-band quantity. */
+    fun store(stock: ResourceStock): Inventory {
+        if (stock.amount <= .0001) return this
+        val existing = find(stock.resourceId)
+        require(existing == null || existing.category == stock.category) {
+            "Resource ${stock.resourceId.value} cannot change inventory category."
         }
         val updated = if (existing == null) {
-            ResourceStock(resourceId, category, mapOf(band to amount))
+            stock
         } else {
             existing.copy(
-                qualityBands = existing.qualityBands +
-                    (band to ((existing.qualityBands[band] ?: 0.0) + amount)),
+                qualityBands = (existing.qualityBands.keys + stock.qualityBands.keys).associateWith { band ->
+                    (existing.qualityBands[band] ?: 0.0) + (stock.qualityBands[band] ?: 0.0)
+                },
             )
         }
-        return copy(resources = resources.filterNot { it.resourceId == resourceId } + updated)
+        return copy(resources = resources.filterNot { it.resourceId == stock.resourceId } + updated)
+    }
+
+    /**
+     * Remove one resource while preserving the exact quality bands moved to another inventory.
+     * Lowest quality moves first, matching the conservative stock-use ordering used elsewhere.
+     */
+    fun withdraw(resourceId: ResourceId, requested: Double): ResourceWithdrawal {
+        val normalized = requested.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val existing = find(resourceId)
+        if (normalized <= 0.0 || existing == null || existing.amount <= .0001) {
+            return ResourceWithdrawal(normalized, null, this)
+        }
+        var remaining = minOf(normalized, existing.amount)
+        val sourceBands = existing.qualityBands.toMutableMap()
+        val movedBands = linkedMapOf<QualityBand, Double>()
+        existing.qualityBands.keys
+            .sortedBy { ResourceQuality.forBand(it).minimum }
+            .forEach { band ->
+                if (remaining <= .0001) return@forEach
+                val available = sourceBands[band] ?: 0.0
+                val moved = minOf(available, remaining)
+                if (moved > .0001) {
+                    sourceBands[band] = (available - moved).coerceAtLeast(0.0)
+                    movedBands[band] = moved
+                    remaining -= moved
+                }
+            }
+        val updated = existing.copy(qualityBands = sourceBands)
+        return ResourceWithdrawal(
+            requested = normalized,
+            stock = ResourceStock(existing.resourceId, existing.category, movedBands),
+            inventory = copy(resources = resources.map { if (it.resourceId == resourceId) updated else it }),
+        )
     }
 
     /**
