@@ -145,7 +145,14 @@ class WorldDiscovery(
 
         if (definition.renewable) {
             val abundance = renewableAbundance(random)
-            return base.copy(abundance = abundance.factor, abundanceLabel = abundance.label)
+            val rank = renewableRank(abundance.label)
+            return base.copy(
+                abundance = abundance.factor,
+                abundanceLabel = abundance.label,
+                renewableOriginalRank = rank,
+                renewableHealth = rank + 1.0,
+                harvestIntensity = 1.0,
+            )
         }
 
         val deposit = finiteDeposit(random, contract.reserveMultiplier, category)
@@ -181,6 +188,13 @@ class WorldDiscovery(
             roll < .96 -> Abundance("Large", 1.45)
             else -> Abundance("Vast", 2.10)
         }
+    }
+
+    private fun renewableRank(label: String): Int = when (label.lowercase()) {
+        "limited" -> 0
+        "large" -> 2
+        "vast" -> 3
+        else -> 1
     }
 
     private fun finiteDeposit(
