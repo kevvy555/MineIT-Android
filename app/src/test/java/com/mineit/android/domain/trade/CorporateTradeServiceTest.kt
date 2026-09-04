@@ -109,6 +109,8 @@ class CorporateTradeServiceTest {
                 } else it
             },
         )
+        val surfaceIronBefore = state.activeColony.inventory.amountFor(ResourceId("surface-iron"))
+        val coalBefore = state.activeColony.inventory.amountFor(ResourceId("coal"))
 
         val quote = service.sellAllQuote(state)
         assertEquals(5.0, quote.quantity, .0001)
@@ -116,8 +118,8 @@ class CorporateTradeServiceTest {
         val result = service.sellAll(state, spaceportServicesAvailable = true)
 
         assertTrue(result.ok)
-        assertEquals(5.0, result.state.activeColony.inventory.amountFor(ResourceId("surface-iron")), .0001)
-        assertEquals(0.0, result.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
+        assertEquals(surfaceIronBefore, result.state.activeColony.inventory.amountFor(ResourceId("surface-iron")), .0001)
+        assertEquals(coalBefore - 5.0, result.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
         assertEquals(5.0, result.state.activeColony.trade.exportUsed, .0001)
     }
 
