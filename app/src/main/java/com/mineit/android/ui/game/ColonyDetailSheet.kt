@@ -1,28 +1,43 @@
 package com.mineit.android.ui.game
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.mineit.android.domain.colony.ColonyNetworkSnapshot
+import com.mineit.android.domain.colony.CommandSourceType
+import com.mineit.android.domain.colony.HeadquartersContinuityPhase
 import com.mineit.android.domain.colony.HeadquartersDepartureGate
 import com.mineit.android.domain.colony.SpaceportStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.ui.design.MineItPalette
 import com.mineit.android.ui.design.MineItPanel
+import com.mineit.android.ui.design.MineItRadius
+import com.mineit.android.ui.design.MineItSecondaryButton
+import com.mineit.android.ui.design.MineItSectionHeader
 import com.mineit.android.ui.design.MineItSpacing
 import com.mineit.android.ui.design.MineItStat
 import com.mineit.android.ui.design.MineItStatusBadge
@@ -46,6 +61,7 @@ fun ColonyDetailSheet(
         spaceport = spaceport,
         departureGate = departureGate,
     )
+    var showSystemDetail by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -59,42 +75,158 @@ fun ColonyDetailSheet(
                 .padding(horizontal = MineItSpacing.Lg, vertical = MineItSpacing.Md),
             verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
         ) {
-            MineItPanel {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Md),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(colony.name, style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "${colony.contract?.name ?: "Contract 01"} • Y${state.date.year} D${state.date.day}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MineItPalette.Muted,
-                        )
-                    }
-                    MineItStatusBadge(
-                        text = colony.status.name.replace('_', ' '),
-                        color = if (colony.status.name == "PLAYING") MineItPalette.Success else MineItPalette.Warning,
-                    )
-                }
-            }
-
-            MetricGrid(presentation.summary)
+            ColonyControlHero(
+                colonyName = colony.name,
+                contractName = colony.contract?.name ?: "Contract 01",
+                date = "Y${state.date.year} D${state.date.day}",
+                presentation = presentation,
+            )
 
             presentation.alerts.forEach { alert ->
                 MineItPanel {
                     Text(
                         alert,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MineItPalette.Warning,
+                        color = if (alert.startsWith("CONGLOMERATE NETWORK OFFLINE")) MineItPalette.Critical else MineItPalette.Warning,
                     )
                 }
             }
 
-            presentation.sections.forEach { section ->
-                OperationalCard(section)
+            MineItSectionHeader("OVERVIEW")
+            AdaptiveMetricGrid(presentation.summary)
+
+            MineItSectionHeader("OPERATIONS")
+            OperationGrid(presentation.operations)
+
+            KoplinLinkPanel(
+                online = network.continuity.networkAvailable,
+                detail = network.continuity.reason,
+            )
+
+            MineItSecondaryButton(
+                text = if (showSystemDetail) "HIDE SYSTEM DETAIL" else "SYSTEM DETAIL",
+                onClick = { showSystemDetail = !showSystemDetail },
+                selected = showSystemDetail,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (showSystemDetail) {
+                presentation.sections.forEach { section ->
+                    OperationalCard(section)
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun ColonyControlHero(
+    colonyName: String,
+    contractName: String,
+    date: String,
+    presentation: ColonyDetailModel,
+) {
+    MineItPanel(raised = true) {
+        Text(
+            presentation.kicker,
+            style = MaterialTheme.typography.labelSmall,
+            color = MineItPalette.Accent,
+            fontWeight = FontWeight.Bold,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Md),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(colonyName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "$contractName • $date",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MineItPalette.Muted,
+                )
+            }
+            MineItStatusBadge(presentation.controlStatus, toneColor(presentation.controlTone))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+        ) {
+            presentation.badges.take(2).forEach { badge ->
+                MineItStatusBadge(badge, MineItPalette.Accent)
+            }
+        }
+    }
+}
+
+@Composable
+private fun OperationGrid(operations: List<ColonyControlOperation>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth < 370.dp) 1 else 2
+        Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
+            operations.chunked(columns).forEach { rowOperations ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+                ) {
+                    rowOperations.forEach { operation ->
+                        OperationTile(operation, Modifier.weight(1f))
+                    }
+                    repeat(columns - rowOperations.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OperationTile(operation: ColonyControlOperation, modifier: Modifier = Modifier) {
+    val accent = toneColor(operation.tone)
+    Surface(
+        modifier = modifier,
+        color = MineItPalette.Control,
+        shape = RoundedCornerShape(MineItRadius.Small),
+        border = BorderStroke(1.dp, MineItPalette.Line),
+    ) {
+        Column(
+            Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+            ) {
+                Text(
+                    operation.title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MineItPalette.Muted,
+                    fontWeight = FontWeight.Bold,
+                )
+                MineItStatusBadge(operation.status, accent)
+            }
+            Text(operation.value, style = MaterialTheme.typography.titleSmall, color = accent)
+            Text(operation.detail, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
+        }
+    }
+}
+
+@Composable
+private fun KoplinLinkPanel(online: Boolean, detail: String) {
+    MineItPanel {
+        MineItSectionHeader(
+            title = "KOPLIN DEEP REACH CORPORATION",
+            trailing = if (online) "LINK ONLINE" else "LINK OFFLINE",
+            color = if (online) MineItPalette.Success else MineItPalette.Critical,
+        )
+        Text(
+            "External charter node KPL-CN08 • conglomerate services follow the colony command network.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MineItPalette.Muted,
+        )
+        if (!online) {
+            Text(detail, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Critical)
         }
     }
 }
@@ -115,7 +247,7 @@ private fun OperationalCard(section: ColonyDetailSection) {
             )
             MineItStatusBadge(section.status, toneColor(section.tone))
         }
-        MetricGrid(section.metrics)
+        DetailMetricGrid(section.metrics)
         section.note?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
         }
@@ -123,9 +255,22 @@ private fun OperationalCard(section: ColonyDetailSection) {
 }
 
 @Composable
-private fun MetricGrid(metrics: List<ColonyDetailMetric>) {
+private fun AdaptiveMetricGrid(metrics: List<ColonyDetailMetric>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columns = if (maxWidth < 370.dp) 2 else 4
+        MetricRows(metrics, columns)
+    }
+}
+
+@Composable
+private fun DetailMetricGrid(metrics: List<ColonyDetailMetric>) {
+    MetricRows(metrics, 2)
+}
+
+@Composable
+private fun MetricRows(metrics: List<ColonyDetailMetric>, columns: Int) {
     Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
-        metrics.chunked(2).forEach { rowMetrics ->
+        metrics.chunked(columns).forEach { rowMetrics ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
@@ -138,7 +283,7 @@ private fun MetricGrid(metrics: List<ColonyDetailMetric>) {
                         stateColor = toneColor(metric.tone),
                     )
                 }
-                if (rowMetrics.size == 1) Spacer(Modifier.weight(1f))
+                repeat(columns - rowMetrics.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
@@ -159,6 +304,14 @@ data class ColonyDetailMetric(
     val tone: ColonyDetailTone = ColonyDetailTone.NORMAL,
 )
 
+data class ColonyControlOperation(
+    val title: String,
+    val status: String,
+    val value: String,
+    val detail: String,
+    val tone: ColonyDetailTone,
+)
+
 data class ColonyDetailSection(
     val title: String,
     val status: String,
@@ -168,12 +321,17 @@ data class ColonyDetailSection(
 )
 
 data class ColonyDetailModel(
+    val kicker: String,
+    val controlStatus: String,
+    val controlTone: ColonyDetailTone,
+    val badges: List<String>,
     val summary: List<ColonyDetailMetric>,
+    val operations: List<ColonyControlOperation>,
     val sections: List<ColonyDetailSection>,
     val alerts: List<String>,
 )
 
-/** Pure presentation mapping so the web-derived Colony Details hierarchy stays regression-testable. */
+/** Pure presentation mapping for the compact web Colony Control hierarchy. */
 object ColonyDetailPresentation {
     fun build(
         population: Double,
@@ -192,6 +350,18 @@ object ColonyDetailPresentation {
         val workforceShortfall = network.workforceAvailable + .001 < network.workforceRequired
         val industryOverloaded = network.industryLoad > network.industryCapacity + .001
         val powerLimited = metrics.powerFactor < .999
+        val commandSource = network.headquarters.sourceType
+        val controlStatus = when {
+            !network.continuity.networkAvailable -> "LINK OFFLINE"
+            commandSource == CommandSourceType.SHIP -> "SHIP COMMAND"
+            commandSource == CommandSourceType.HEADQUARTERS -> "ACTIVE"
+            else -> "NO COMMAND"
+        }
+        val controlTone = when {
+            !network.continuity.networkAvailable -> ColonyDetailTone.CRITICAL
+            commandSource == null -> ColonyDetailTone.WARNING
+            else -> factorTone(commandFactor)
+        }
 
         val summary = listOf(
             ColonyDetailMetric("POPULATION", format(population)),
@@ -222,10 +392,55 @@ object ColonyDetailPresentation {
             ),
         )
 
+        val powerStatus = if (powerLimited) "LIMITED" else "AVAILABLE"
+        val workforceStatus = if (workforceShortfall) "SHORTFALL" else "AVAILABLE"
+        val industryStatus = when {
+            industryOverloaded -> "OVERLOADED"
+            industryFactor < .999 -> "THROTTLED"
+            else -> "AVAILABLE"
+        }
+        val operations = listOf(
+            ColonyControlOperation(
+                title = "COMMAND",
+                status = if (network.continuity.networkAvailable) "ONLINE" else "OFFLINE",
+                value = "${format(network.headquarters.load)} / ${format(network.headquarters.capacity)}",
+                detail = "${commandSource?.name ?: "UNLINKED"} • ${percent(commandFactor)} efficiency",
+                tone = if (network.continuity.networkAvailable) factorTone(commandFactor) else ColonyDetailTone.CRITICAL,
+            ),
+            ColonyControlOperation(
+                title = "POWER",
+                status = powerStatus,
+                value = "${format(metrics.powerFuelLimitedGeneration)} / ${format(metrics.powerDemand)}",
+                detail = "${format(metrics.powerCapacity)} installed • ${format(metrics.powerFuelBurn)}/d Fuel",
+                tone = if (powerLimited) factorTone(metrics.powerFactor) else ColonyDetailTone.GOOD,
+            ),
+            ColonyControlOperation(
+                title = "WORKFORCE",
+                status = workforceStatus,
+                value = "${format(network.workforceAvailable)} / ${format(network.workforceRequired)}",
+                detail = "${format(max(0.0, network.workforceAvailable - network.workforceRequired))} free",
+                tone = if (workforceShortfall) factorTone(workforceFactor) else ColonyDetailTone.GOOD,
+            ),
+            ColonyControlOperation(
+                title = "INDUSTRY",
+                status = industryStatus,
+                value = "${format(network.industryLoad)} / ${format(network.industryCapacity)}",
+                detail = "${format(network.industryInstalled)} installed",
+                tone = if (industryOverloaded || industryFactor < .999) factorTone(industryFactor) else ColonyDetailTone.GOOD,
+            ),
+            ColonyControlOperation(
+                title = "SPACEPORT",
+                status = if (spaceport.operational) "ONLINE" else "OFFLINE",
+                value = "${spaceport.berths} BERTHS • ${spaceport.serviceSlots} SLOTS",
+                detail = "${spaceport.cargoPerDay} cargo/d • ${spaceport.passengersPerDay} people/d",
+                tone = if (spaceport.operational) ColonyDetailTone.GOOD else ColonyDetailTone.CRITICAL,
+            ),
+        )
+
         val sections = listOf(
             ColonyDetailSection(
                 title = "POWER NETWORK",
-                status = if (powerLimited) "LIMITED" else "AVAILABLE",
+                status = powerStatus,
                 tone = if (powerLimited) factorTone(metrics.powerFactor) else ColonyDetailTone.GOOD,
                 metrics = listOf(
                     ColonyDetailMetric("INSTALLED", format(metrics.powerCapacity)),
@@ -238,12 +453,12 @@ object ColonyDetailPresentation {
                 note = if (powerLimited) {
                     "Power is allocated by priority. Life Support is protected before commercial Industry."
                 } else {
-                    "Generation currently covers colony demand; generator Fuel burn is charged from beginning-of-day stock."
+                    "Generation covers colony demand; generator Fuel burn is charged from beginning-of-day stock."
                 },
             ),
             ColonyDetailSection(
                 title = "OPERATIONAL WORKFORCE",
-                status = if (workforceShortfall) "SHORTFALL" else "AVAILABLE",
+                status = workforceStatus,
                 tone = if (workforceShortfall) factorTone(workforceFactor) else ColonyDetailTone.GOOD,
                 metrics = listOf(
                     ColonyDetailMetric("AVAILABLE", format(network.workforceAvailable)),
@@ -253,15 +468,11 @@ object ColonyDetailPresentation {
                     ColonyDetailMetric("SURVIVAL", percent(network.workforceSurvivalFactor), factorTone(network.workforceSurvivalFactor)),
                     ColonyDetailMetric("IND STAFF", percent(network.industryStaffFactor), factorTone(network.industryStaffFactor)),
                 ),
-                note = "Food and Fuel receive worker priority. Build and Ore are automatically throttled when workers become scarce.",
+                note = "Food and Fuel receive worker priority. Build and Ore are throttled when workers become scarce.",
             ),
             ColonyDetailSection(
                 title = "INDUSTRIAL CAPACITY",
-                status = when {
-                    industryOverloaded -> "OVERLOADED"
-                    industryFactor < .999 -> "THROTTLED"
-                    else -> "AVAILABLE"
-                },
+                status = industryStatus,
                 tone = if (industryOverloaded || industryFactor < .999) factorTone(industryFactor) else ColonyDetailTone.GOOD,
                 metrics = listOf(
                     ColonyDetailMetric("LOAD / CAP", "${format(network.industryLoad)} / ${format(network.industryCapacity)}"),
@@ -272,7 +483,7 @@ object ColonyDetailPresentation {
                     ColonyDetailMetric("BUILD / ORE", percent(network.industryCommercialFactor), factorTone(network.industryCommercialFactor)),
                 ),
                 note = if (industryOverloaded || industryFactor < .999) {
-                    "Food and Fuel keep priority. Build and Ore are reduced until Industrial Capacity, staffing or Power improves."
+                    "Food and Fuel keep priority. Build and Ore are reduced until Industry, staffing or Power improves."
                 } else {
                     "Developed sites consume Industrial Capacity; spare capacity runs commercial Build and Ore operations."
                 },
@@ -282,7 +493,7 @@ object ColonyDetailPresentation {
                 status = if (network.continuity.networkAvailable) "ONLINE" else "OFFLINE",
                 tone = if (network.continuity.networkAvailable) factorTone(commandFactor) else ColonyDetailTone.CRITICAL,
                 metrics = listOf(
-                    ColonyDetailMetric("SOURCE", network.headquarters.sourceType?.name ?: "NONE"),
+                    ColonyDetailMetric("SOURCE", commandSource?.name ?: "NONE"),
                     ColonyDetailMetric("LOAD / CAP", "${format(network.headquarters.load)} / ${format(network.headquarters.capacity)}"),
                     ColonyDetailMetric("EFFICIENCY", percent(commandFactor), factorTone(commandFactor)),
                     ColonyDetailMetric(
@@ -314,12 +525,26 @@ object ColonyDetailPresentation {
         )
 
         val alerts = buildList {
+            when (network.continuity.phase) {
+                HeadquartersContinuityPhase.OUTAGE -> add("CONGLOMERATE NETWORK OFFLINE — ${network.continuity.reason}")
+                HeadquartersContinuityPhase.RECOVERY -> add("HEADQUARTERS RECOVERY — ${network.continuity.reason}")
+                HeadquartersContinuityPhase.ONLINE -> Unit
+            }
             if (!departureGate.ok) {
                 add("FOUNDING-SHIP HANDOVER BLOCKED — ${departureGate.failures.joinToString(" • ")}")
             }
         }
 
-        return ColonyDetailModel(summary = summary, sections = sections, alerts = alerts)
+        return ColonyDetailModel(
+            kicker = if (commandSource == CommandSourceType.HEADQUARTERS) "COLONY CONTROL • HEADQUARTERS" else "COLONY CONTROL",
+            controlStatus = controlStatus,
+            controlTone = controlTone,
+            badges = listOf("COLONY SERVICES", commandSource?.name ?: "UNLINKED"),
+            summary = summary,
+            operations = operations,
+            sections = sections,
+            alerts = alerts,
+        )
     }
 
     private fun factorTone(value: Double): ColonyDetailTone = when {
