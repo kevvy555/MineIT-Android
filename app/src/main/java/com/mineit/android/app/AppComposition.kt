@@ -5,6 +5,7 @@ import com.mineit.android.BuildConfig
 import com.mineit.android.data.save.FileGameStatePersistence
 import com.mineit.android.domain.model.ColonyId
 import com.mineit.android.domain.model.NewGameFactory
+import com.mineit.android.domain.simulation.DailySimulationEngine
 import com.mineit.android.domain.world.SurveyGameService
 import java.io.File
 
@@ -12,6 +13,7 @@ import java.io.File
 class AppComposition(application: Application) {
     val newGameFactory = NewGameFactory()
     val surveyGameService = SurveyGameService()
+    val dailySimulationEngine = DailySimulationEngine(surveyGameService)
 
     private val initialState = newGameFactory.contract01(
         colonySeed = VALIDATION_SEED,
