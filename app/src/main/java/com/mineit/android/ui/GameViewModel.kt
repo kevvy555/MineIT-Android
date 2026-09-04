@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mineit.android.app.AppComposition
 import com.mineit.android.app.persistence.PersistenceLoadResult
+import com.mineit.android.app.persistence.PersistenceSaveResult
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.world.SectorCoordinate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,7 +51,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 newGameFactory.settleLandingSite(current, index)
             }
             _selectedSector.value = null
-            _statusMessage.value = if (result.persistence is com.mineit.android.app.persistence.PersistenceSaveResult.Success) {
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
                 "Landing Site ${index + 1} selected. The 8×8 surface grid is ready for surveying."
             } else {
                 "Landing site selected, but the native save could not be written."
@@ -63,6 +64,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = null
     }
 
+    fun surveyDays(coordinate: SectorCoordinate): Int? = surveyGameService.surveyDays(state.value, coordinate)
+
     fun surveySelectedSector() {
         val coordinate = _selectedSector.value ?: return
         val snapshot = state.value
@@ -72,7 +75,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val result = session.commit("enqueue-survey") { current ->
                 surveyGameService.enqueue(current, coordinate)
             }
-            _statusMessage.value = if (result.persistence is com.mineit.android.app.persistence.PersistenceSaveResult.Success) {
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
                 "Sector ${coordinate.x},${coordinate.y} queued for survey ($days days at current capability)."
             } else {
                 "Survey queued, but the native save could not be written."
@@ -94,7 +97,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val processed = surveyGameService.processSurveys(current)
                 processed.state.copy(date = current.date.nextDay())
             }
-            _statusMessage.value = if (result.persistence is com.mineit.android.app.persistence.PersistenceSaveResult.Success) {
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) {
                 "Survey progress advanced one game day. Economy/survival simulation remains intentionally inactive until Phase 3."
             } else {
                 "Survey progress advanced, but the native save could not be written."
