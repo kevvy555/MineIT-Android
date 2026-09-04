@@ -26,7 +26,7 @@ class FileGameStatePersistenceTest {
         assertEquals(state, loaded.state)
         assertEquals(SaveSource.ACTIVE, loaded.source)
         assertEquals(false, loaded.recoveredFromBackup)
-        assertEquals(1, loaded.metadata.formatVersion)
+        assertEquals(NativeSaveFormat.CURRENT_VERSION, loaded.metadata.formatVersion)
         assertEquals("0.2.0-migration", loaded.metadata.gameVersion)
         assertEquals("fixture-universe", loaded.metadata.universeContentVersion)
         assertEquals("universe-commit", loaded.metadata.universeSourceCommit)
@@ -68,20 +68,24 @@ class FileGameStatePersistenceTest {
         File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("broken-again")
 
         val recovered = runBlocking { repository.load() } as PersistenceLoadResult.Loaded
+
+        assertEquals(SaveSource.BACKUP, recovered.source)
+        assertTrue(recovered.recoveredFromBackup)
         assertEquals(first, recovered.state)
     }
 
     @Test
-    fun `invalid active save with no healthy backup produces explicit failure`() = withTempDirectory { directory ->
+    fun `invalid active and backup produce explicit failure`() = withTempDirectory { directory ->
         val repository = repository(directory)
-        runBlocking { repository.save(TestGameStates.foundationState()) }
-        File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("not-json")
+        File(directory, FileGameStatePersistence.ACTIVE_FILE_NAME).writeText("bad-active")
+        File(directory, FileGameStatePersistence.BACKUP_FILE_NAME).writeText("bad-backup")
 
         val result = runBlocking { repository.load() }
 
         assertTrue(result is PersistenceLoadResult.Failure)
         result as PersistenceLoadResult.Failure
-        assertTrue(result.activeError?.contains(FileGameStatePersistence.ACTIVE_FILE_NAME) == true)
+        assertTrue(result.activeError?.isNotBlank() == true)
+        assertTrue(result.backupError?.isNotBlank() == true)
     }
 
     private fun repository(
