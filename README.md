@@ -68,6 +68,16 @@ API 37 / Android 17 remains a preview SDK at the time this POC was created, so t
 
 GitHub Actions runs unit tests and builds `app-debug.apk` on pushes to `main` and feature branches. Superseded builds on the same branch are cancelled to avoid wasting CI minutes.
 
+### Development APK signing
+
+CI test APKs use the pinned public development keystore from `@react-native-community/template@0.83.1`. This is intentionally a development-only signing identity so successive POC APKs can update an installed test build in place. It must never be used for a production or Google Play release.
+
+The expected development signing certificate SHA-256 fingerprint is:
+
+`fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c`
+
+CI verifies the APK signer before uploading the artifact. A future production release will use a separate private release/upload key and normal Google Play signing.
+
 ## If the POC is accepted
 
 The next step should not be a large rewrite. Port vertical slices while preserving the current web game as the behavioural reference. A sensible order is:
