@@ -4,6 +4,7 @@ import com.mineit.android.app.persistence.PersistenceLoadResult
 import com.mineit.android.app.persistence.PersistenceSaveResult
 import com.mineit.android.app.persistence.SaveSource
 import com.mineit.android.data.save.FileGameStatePersistence
+import com.mineit.android.data.save.NativeSaveFormat
 import com.mineit.android.testing.TestGameStates
 import java.io.File
 import java.nio.file.Files
@@ -31,7 +32,7 @@ class GameSessionTest {
         assertEquals("test-cash-change", session.diagnostics.value.lastAction)
         assertEquals(PersistenceState.SAVED, session.diagnostics.value.persistenceState)
         assertTrue(result.persistence is PersistenceSaveResult.Success)
-        assertEquals(1, session.diagnostics.value.saveMetadata?.formatVersion)
+        assertEquals(NativeSaveFormat.CURRENT_VERSION, session.diagnostics.value.saveMetadata?.formatVersion)
     }
 
     @Test
