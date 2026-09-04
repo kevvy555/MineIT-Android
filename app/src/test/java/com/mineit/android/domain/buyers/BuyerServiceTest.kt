@@ -154,7 +154,8 @@ class BuyerServiceTest {
         assertEquals(123.0, transferred.state.activeColony.trade.exportUsed, .0001)
         assertEquals(0.0, transferred.state.activeColony.inventory.amountFor(resource), .0001)
         assertEquals(32_150.0, transferred.state.company.cash, .0001)
-        assertEquals(.01, transferred.state.company.reputation, .0001)
+        // On-time 75% fulfilment is -1 happiness => -0.10 reputation, then +0.01 shipment award.
+        assertEquals(-.09, transferred.state.company.reputation, .0001)
 
         val underHalfState = state.copy(colonies = state.colonies.map {
             if (it.id == colony.id) it.copy(inventory = colony.inventory.store(resource, ResourceCategory.ORE, 49.0, quality = 201)) else it
