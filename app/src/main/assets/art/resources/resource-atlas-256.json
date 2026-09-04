@@ -1,0 +1,291 @@
+{
+  "version": 1,
+  "frameSize": 256,
+  "columns": 8,
+  "rows": 5,
+  "width": 2048,
+  "height": 1280,
+  "quality": 92,
+  "frames": {
+    "fungal": {
+      "x": 0,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/fungal-shelf.png"
+    },
+    "flora": {
+      "x": 256,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/edible-flora.png"
+    },
+    "herd": {
+      "x": 512,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/grazing-herd.png"
+    },
+    "nutrient": {
+      "x": 768,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/nutrient-crop.png"
+    },
+    "protein": {
+      "x": 1024,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/protein-bloom.png"
+    },
+    "thermal": {
+      "x": 1280,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/thermal-algae.png"
+    },
+    "synthetic": {
+      "x": 1536,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/food-resources/Originals/synthetic-nutrient.png"
+    },
+    "fiber": {
+      "x": 1792,
+      "y": 0,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/construction-fibre.png"
+    },
+    "stone": {
+      "x": 0,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/stone.png"
+    },
+    "clay": {
+      "x": 256,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/clay.png"
+    },
+    "silica": {
+      "x": 512,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/silica.png"
+    },
+    "limestone": {
+      "x": 768,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/limestone.png"
+    },
+    "structural": {
+      "x": 1024,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/structural-mineral.png"
+    },
+    "ceramic": {
+      "x": 1280,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/build-resources/Originals/advanced-ceramic-feedstock.png"
+    },
+    "biomass": {
+      "x": 1536,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/biomass.png"
+    },
+    "peat": {
+      "x": 1792,
+      "y": 256,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/peat-bed.png"
+    },
+    "coal": {
+      "x": 0,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/coal-seam.png"
+    },
+    "oil": {
+      "x": 256,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/crude-oil.png"
+    },
+    "gas": {
+      "x": 512,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/natural-gas.png"
+    },
+    "fissile": {
+      "x": 768,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/fissile-mineral.png"
+    },
+    "brine": {
+      "x": 1024,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/hydrogen-rich-brine.png"
+    },
+    "exotic-fuel": {
+      "x": 1280,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/fuel-resources/Originals/exotic-fuel-crystal.png"
+    },
+    "surface-iron": {
+      "x": 1536,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/surface-iron-nodules.png"
+    },
+    "iron": {
+      "x": 1792,
+      "y": 512,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/iron-ore.png"
+    },
+    "copper": {
+      "x": 0,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/copper-ore.png"
+    },
+    "reactive": {
+      "x": 256,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/reactive-metal-ore.png"
+    },
+    "conductive": {
+      "x": 512,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/conductive-ore.png"
+    },
+    "magnetic": {
+      "x": 768,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/magnetic-ore.png"
+    },
+    "exotic": {
+      "x": 1024,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/exotic-industrial-mineral.png"
+    },
+    "advanced": {
+      "x": 1280,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/industrial-ores/Originals/advanced-element-deposit.png"
+    },
+    "silver": {
+      "x": 1536,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/silver.png"
+    },
+    "gold": {
+      "x": 1792,
+      "y": 768,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/gold.png"
+    },
+    "gems": {
+      "x": 0,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/gemstone-deposit.png"
+    },
+    "platinum": {
+      "x": 256,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/platinum.png"
+    },
+    "palladium": {
+      "x": 512,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/palladium.png"
+    },
+    "sapphire": {
+      "x": 768,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/sapphire.png"
+    },
+    "ruby": {
+      "x": 1024,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/ruby.png"
+    },
+    "emerald": {
+      "x": 1280,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/emerald.png"
+    },
+    "diamond": {
+      "x": 1536,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/diamond.png"
+    },
+    "crystal": {
+      "x": 1792,
+      "y": 1024,
+      "w": 256,
+      "h": 256,
+      "source": "assets/art/resources/precious-metals/Originals/exotic-crystal.png"
+    }
+  }
+}
