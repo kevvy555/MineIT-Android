@@ -19,17 +19,17 @@ class GameSessionTest {
     @Test
     fun `commit owns immutable root transition and persistence diagnostics`() = withTempDirectory { directory ->
         val session = GameSession(
-            initialState = TestGameStates.foundationState(cash = 500),
+            initialState = TestGameStates.foundationState(cash = 500.0),
             persistence = repository(directory),
         )
 
         val result = runBlocking {
             session.commit("test-cash-change") { state ->
-                state.copy(company = state.company.copy(cash = 475))
+                state.copy(company = state.company.copy(cash = 475.0))
             }
         }
 
-        assertEquals(475L, session.state.value.company.cash)
+        assertEquals(475.0, session.state.value.company.cash, .0001)
         assertEquals(1L, session.diagnostics.value.revision)
         assertEquals("test-cash-change", session.diagnostics.value.lastAction)
         assertEquals(PersistenceState.SAVED, session.diagnostics.value.persistenceState)
@@ -40,7 +40,7 @@ class GameSessionTest {
     @Test
     fun `fresh session restores the exact previously saved canonical state`() = withTempDirectory { directory ->
         val first = GameSession(
-            initialState = TestGameStates.foundationState(cash = 500),
+            initialState = TestGameStates.foundationState(cash = 500.0),
             persistence = repository(directory),
         )
         val expected = runBlocking {
@@ -55,7 +55,7 @@ class GameSessionTest {
         }
 
         val restarted = GameSession(
-            initialState = TestGameStates.foundationState(cash = 1),
+            initialState = TestGameStates.foundationState(cash = 1.0),
             persistence = repository(directory),
         )
         val loadResult = runBlocking { restarted.restoreFromPersistence() }
@@ -71,19 +71,19 @@ class GameSessionTest {
     @Test
     fun `reset starts a fresh authoritative state and clears previous load history`() = withTempDirectory { directory ->
         val original = GameSession(
-            initialState = TestGameStates.foundationState(cash = 500),
+            initialState = TestGameStates.foundationState(cash = 500.0),
             persistence = repository(directory),
         )
         runBlocking { original.persistCurrentState() }
 
         val restarted = GameSession(
-            initialState = TestGameStates.foundationState(cash = 1),
+            initialState = TestGameStates.foundationState(cash = 1.0),
             persistence = repository(directory),
         )
         runBlocking { restarted.restoreFromPersistence() }
         assertEquals(SaveSource.ACTIVE, restarted.diagnostics.value.loadedFrom)
 
-        val fresh = TestGameStates.foundationState(cash = 32_000)
+        val fresh = TestGameStates.foundationState(cash = 32_000.0)
         val reset = runBlocking { restarted.reset("new-game", fresh) }
 
         assertTrue(reset.persistence is PersistenceSaveResult.Success)
