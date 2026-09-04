@@ -1,6 +1,7 @@
 package com.mineit.android.data.save
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 
 interface NativeSaveMigration {
@@ -9,9 +10,18 @@ interface NativeSaveMigration {
     fun migrate(input: JsonObject): JsonObject
 }
 
+object NativeSaveV1ToV2 : NativeSaveMigration {
+    override val fromVersion: Int = 1
+    override val toVersion: Int = 2
+
+    override fun migrate(input: JsonObject): JsonObject = JsonObject(
+        input + ("formatVersion" to JsonPrimitive(toVersion)),
+    )
+}
+
 class NativeSaveMigrationChain(
     private val currentVersion: Int = NativeSaveFormat.CURRENT_VERSION,
-    migrations: List<NativeSaveMigration> = emptyList(),
+    migrations: List<NativeSaveMigration> = defaultMigrations(currentVersion),
 ) {
     private val migrationsBySource = migrations.associateBy { it.fromVersion }
 
@@ -53,5 +63,11 @@ class NativeSaveMigrationChain(
             ?: error("Native save is missing formatVersion.")
         return raw.toIntOrNull()
             ?: error("Native save formatVersion must be an integer.")
+    }
+
+    companion object {
+        private fun defaultMigrations(currentVersion: Int): List<NativeSaveMigration> = buildList {
+            if (currentVersion >= 2) add(NativeSaveV1ToV2)
+        }
     }
 }
