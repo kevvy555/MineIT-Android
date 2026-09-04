@@ -1,8 +1,8 @@
 # MineIT Web-to-Native Android Migration Guide
 
-**Status:** Living migration plan — Phases 0–5 complete/accepted; Phase 6 implementation and regression exit gate complete, hands-on validation pending  
+**Status:** Living migration plan — Phases 0–5 complete/accepted; Phase 6 domain/regression implementation complete, UI/layout parity refinement in progress before acceptance  
 **Source application:** `kevvy555/MineIT` (`develop`)  
-**Source behavioural baseline:** commit `9e58983adaa7a15cd525451266ce9df3c17ae886`  
+**Source behavioural and UI-layout baseline:** commit `9e58983adaa7a15cd525451266ce9df3c17ae886`  
 **Source game version:** `5.13.15`  
 **Source save version:** `16`  
 **Target application:** `kevvy555/MineIT-Android`  
@@ -19,6 +19,8 @@ The governing rule is:
 
 > **Preserve gameplay by default. Improve architecture where the improvement does not materially change gameplay.**
 
+For player-facing UI, the current web game is also the **layout and information-hierarchy reference**. Native Android should preserve the recognisable screen structure, major control placement, information ordering and workflow by default, while deliberately improving screens or interactions that are genuinely weak. The goal is neither pixel-for-pixel DOM copying nor an unsolicited redesign.
+
 Clear defects may be corrected with regression coverage. Material balancing, progression or economy redesigns remain separate approved work.
 
 The target is a native, offline-first Android game with no WebView and no mandatory backend/server dependency.
@@ -33,10 +35,10 @@ The following are part of the migration contract:
 - [`migration/PHASE_3_DAILY_SIMULATION.md`](./migration/PHASE_3_DAILY_SIMULATION.md) — accepted daily simulation/colony-survival implementation;
 - [`migration/PHASE_4_BUILDINGS_HEADQUARTERS.md`](./migration/PHASE_4_BUILDINGS_HEADQUARTERS.md) — current buildings, extraction sites, Power, Industry, Spaceport and Headquarters implementation;
 - [`migration/PHASE_5_NATIVE_UI.md`](./migration/PHASE_5_NATIVE_UI.md) — accepted production native UI/map and design-system foundation;
-- [`migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md`](./migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md) — current trade, contracts, buyers, commercial events and Game Log implementation;
+- [`migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md`](./migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md) — current trade, contracts, buyers, commercial events and Game Log implementation/refinement state;
 - [`migration/INTENTIONAL_DIVERGENCES.md`](./migration/INTENTIONAL_DIVERGENCES.md) — required log for deliberate semantic differences;
 - [`migration/RESOURCE_ARCHITECTURE_DIRECTION.md`](./migration/RESOURCE_ARCHITECTURE_DIRECTION.md) — resource architecture improvements allowed during migration without implementing the resource overhaul;
-- [`migration/DESIGN_SYSTEM_DIRECTION.md`](./migration/DESIGN_SYSTEM_DIRECTION.md) — MineIT-wide visual/interaction consistency workstream;
+- [`migration/DESIGN_SYSTEM_DIRECTION.md`](./migration/DESIGN_SYSTEM_DIRECTION.md) — MineIT-wide visual/interaction consistency and UI-led vertical-slice workstream;
 - [`migration/UNIVERSE_BUNDLING_DIRECTION.md`](./migration/UNIVERSE_BUNDLING_DIRECTION.md) — build-time MineIT-Universe pinning, validation and offline bundling.
 
 Repository state and these documents are the recovery source; do not rely on chat history alone.
@@ -53,10 +55,10 @@ The migration is successful when:
 6. Save data is versioned, atomic, recoverable and migration-tested.
 7. Existing web saves can be imported where practical.
 8. MineIT-Universe remains canonical and required data/art is bundled into builds for offline play.
-9. The migration produces a consistent MineIT design language without replacing successful core UX concepts merely for novelty.
+9. The migration produces a consistent MineIT design language while preserving recognisable screen hierarchy and workflows unless a deliberate refinement is chosen.
 10. HTML/CSS mocks remain available as rapid visual prototypes; approved production UI is Compose.
 11. Android CI proves domain/parity tests, save migration, build validity and signing consistency.
-12. The web game remains available as the behavioural reference until native parity is accepted.
+12. The web game remains available as the behavioural and UI-layout reference until native parity is accepted.
 13. After cutover, no permanent duplicate game engines are maintained unless a separate supported web edition is deliberately chosen.
 
 ## 4. Explicit non-goals
@@ -66,6 +68,7 @@ The migration must not become an uncontrolled redesign.
 Do **not** automatically:
 
 - redesign gameplay simply because code is moving;
+- materially redesign a working screen merely because Compose makes another layout convenient;
 - perform the full resource-economy overhaul;
 - define the future refined/manufactured resource catalogue;
 - rebalance prices, yields, Fuel, nutrition or progression;
@@ -383,28 +386,42 @@ Do not implement during parity migration unless separately approved:
 - buyer-market redesign for processed goods;
 - economy/progression rebalance.
 
-## 12. MineIT design consistency workstream
+## 12. MineIT design consistency and layout-parity workstream
 
 Authoritative detail: [`migration/DESIGN_SYSTEM_DIRECTION.md`](./migration/DESIGN_SYSTEM_DIRECTION.md).
 
-> **Preserve successful MineIT UX concepts; standardise the language used to express them.**
+> **The current web MineIT UI is the layout and information-hierarchy reference. Preserve what works, and improve deliberately rather than redesigning by default.**
 
-The map-first structure, compact operational presentation and existing MineIT identity remain. Do not redesign every screen from scratch.
+The map-first structure, compact operational presentation and existing MineIT identity remain.
 
-### 12.1 HTML/CSS mocks remain valid
+### 12.1 Screen migration rule
+
+Before implementing or substantially revising a player-facing screen, inspect together:
+
+- the current web `views/`/HTML structure;
+- the CSS that determines layout and visual hierarchy;
+- the `js/ui/` controller/presentation behaviour;
+- the relevant domain owner and tests.
+
+For that screen, explicitly decide what is **preserved**, **refined** or **replaced**. Preserve the recognisable structure, major controls, information ordering and workflow unless there is a reason to change them.
+
+Native refinements are encouraged where useful: safe-area handling, responsive sizing, typography, touch targets, accessibility, Android Back/navigation, sheets/dialogs and subtle haptics. A materially different screen layout should be a deliberate design decision rather than an incidental Compose implementation choice.
+
+### 12.2 HTML/CSS mocks remain valid
 
 ```text
-idea
- → HTML/CSS visual mock when useful
- → visual approval
+existing web screen
+ → inspect current HTML/CSS/controller
+ → HTML/CSS mock when a material refinement is proposed
+ → visual approval when useful
  → Compose using MineIT design primitives
- → Preview/screenshot test
- → APK hands-on check where valuable
+ → Preview/screenshot/interaction test
+ → APK hands-on check
 ```
 
 HTML is a visual specification, never a WebView production implementation.
 
-### 12.2 Native design system
+### 12.3 Native design system
 
 Standardise semantic tokens for:
 
@@ -420,7 +437,7 @@ Standardise semantic tokens for:
 
 Create reusable composables when genuine repetition appears: panels, section headers, resource cards, stat rows, buttons, status badges, progress, list rows, dialogs/sheets, building/ship cards and common empty/error states.
 
-### 12.3 Consistency audit
+### 12.4 Consistency audit
 
 Normalise repeated concepts across features: resource quantities/quality, money/costs, capacity, Power/workforce/Industry, building levels/actions, ship capacities/status, contracts/buyers, warnings, progress, selection, numbers/dates/percentages and navigation/back behaviour.
 
@@ -466,9 +483,9 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 | `js/data/*.js` | typed definitions/bundled adapters | static data outside UI |
 | `js/persistence/save-repository.js` | `data/save` | atomic files + backup + migrations |
 | `js/app.js` | composition/session/clock/coordinators | split responsibilities |
-| `js/ui/*.js` | feature ViewModels/composables | render state + emit intent |
-| `views/*.html` | composables | translate layout, not DOM mechanics |
-| `css/*` | design tokens/modifiers/components | consolidate visual rules |
+| `js/ui/*.js` | feature ViewModels/composables | render state + emit intent; preserve screen workflow |
+| `views/*.html` | composables | preserve layout intent/information hierarchy, not DOM mechanics |
+| `css/*` | design tokens/modifiers/components | preserve hierarchy, consolidate visual rules |
 | map/star canvas | Compose Canvas/custom drawing | native input/rendering |
 | browser lifecycle | coroutine/ViewModel/Compose lifecycle | scoped ownership |
 | Node/browser tests | JUnit/Compose/screenshot/instrumentation | preserve behavioural intent |
@@ -486,7 +503,7 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 - [x] daily simulation engine;
 - [x] speed/pause/`SimulationClock`;
 - [ ] deterministic simulation RNG state for later stochastic subsystems;
-- [x] durable game log and native presentation.
+- [x] durable game log and native presentation foundation.
 
 ### Resources/colony/infrastructure
 
@@ -540,7 +557,8 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 - [x] Corporate Ship events;
 - [x] import/export capacity/reserves;
 - [x] buyer offers/contracts/collections;
-- [x] relationship/miss/termination behaviour.
+- [x] relationship/miss/termination behaviour;
+- [ ] final web-layout-based native presentation refinement/acceptance.
 
 ### Ships/expansion
 
@@ -564,9 +582,23 @@ Debug-only actions stay out of release UX unless deliberately promoted.
 - [ ] provenance reporting;
 - [ ] offline load validation.
 
-## 17. Migration strategy — vertical slices, not big bang
+## 17. Migration strategy — foundations first, then UI-led vertical feature slices
 
-Each phase ends with tests and a usable/inspectable result. Do not carry several half-ported engines in production simultaneously.
+Each phase ends with tests and a usable/inspectable result. Do not carry several half-ported engines or several player-facing screens with only placeholder validation UI in production simultaneously.
+
+Phases 0–6 deliberately established substantial permanent backend foundations first: state, persistence, world/survey, daily simulation, buildings/Power/HQ and commercial services. That reduced the risk of UI-owned gameplay logic and temporary duplicate engines.
+
+From the Phase 6 refinement onward, player-facing migration switches to **UI-led vertical feature slices**. For each slice:
+
+1. inspect the current web screen/view, CSS, UI/controller and domain owner/tests together;
+2. identify what should be preserved, deliberately refined or replaced;
+3. confirm which native domain/application capability already exists;
+4. implement only the missing backend functionality needed by that slice in canonical owners;
+5. recreate the screen in Compose with recognisable MineIT hierarchy/workflow;
+6. add the relevant domain, interaction and presentation coverage;
+7. validate the complete slice on-device before moving on.
+
+Cross-cutting backend prerequisites may still be implemented first when several screens genuinely depend on them. The change is that such work is driven by the next complete player-facing slice rather than accumulated for a distant UI phase.
 
 ### Phase 0 — Baseline and migration harness — COMPLETE
 
@@ -670,7 +702,7 @@ Detailed record: [`migration/PHASE_4_BUILDINGS_HEADQUARTERS.md`](./migration/PHA
 - [x] hold/drag multi-select;
 - [x] queue/filter/focus presentation;
 - [x] building/site panels;
-- [x] colony/Power detail;
+- [x] colony/Power detail foundation;
 - [x] responsive phone layout;
 - [x] previews/regression baselines where useful;
 - [x] accessibility/back/haptic conventions;
@@ -680,9 +712,15 @@ Detailed record: [`migration/PHASE_4_BUILDINGS_HEADQUARTERS.md`](./migration/PHA
 
 Exit gate: core first-colony gameplay is hands-on playable without POC/web UI and key concepts use one design language. **Passed.**
 
+Device review during Phase 6 later identified that some secondary/detail layouts built on top of this foundation had drifted too far from the web information hierarchy. That feedback changes the migration method, not the accepted map/design-system/domain foundation.
+
 Detailed record: [`migration/PHASE_5_NATIVE_UI.md`](./migration/PHASE_5_NATIVE_UI.md).
 
-### Phase 6 — Trade, contracts and commercial events — IMPLEMENTED / FINAL VALIDATION
+### Phase 6 — Trade, contracts and commercial events — IMPLEMENTED / UI PARITY REFINEMENT
+
+Domain/application implementation is complete and regression-green. `0.7.0-migration` was used as a physical-device feedback build, but Phase 6 is **not accepted** because several player-facing layouts were more heavily redesigned than intended.
+
+Completed backend/behaviour:
 
 - [x] Corporate Ship arrival/departure;
 - [x] buy/sell;
@@ -693,58 +731,86 @@ Detailed record: [`migration/PHASE_5_NATIVE_UI.md`](./migration/PHASE_5_NATIVE_U
 - [x] event pause/resume integration;
 - [x] buyer offers/contracts/recurring collections;
 - [x] buyer relationship/miss/termination outcomes;
-- [x] Game Log durable state and presentation;
+- [x] Game Log durable state and presentation foundation;
 - [x] native save v5 migration and non-default round-trip coverage;
 - [x] `0.7.0-migration` implementation/regression/build/signing checkpoint green;
-- [ ] final documentation head full CI;
-- [ ] `0.7.0-migration` hands-on physical-device validation/acceptance.
+- [x] first physical-device review completed and UI-layout drift identified.
 
-Exit gate: Contract 01 commercial progression/resolution works natively. **Passed in regression/CI at the implementation checkpoint; hands-on acceptance remains before promotion to `main`.**
+Required refinement before acceptance:
+
+- [ ] review/recreate Colony Details against the current web layout/information hierarchy;
+- [ ] review/recreate Corporate Ship/Trade as a complete web-referenced vertical slice;
+- [ ] review/recreate Contract presentation as a complete web-referenced vertical slice;
+- [ ] review/recreate Buyers presentation as a complete web-referenced vertical slice;
+- [ ] review/recreate Game Log presentation for compact MineIT consistency;
+- [ ] retain only deliberate native refinements rather than incidental redesign;
+- [ ] revised UI interaction/presentation regression coverage;
+- [ ] revised exact head full CI and signer verification;
+- [ ] revised APK hands-on physical-device acceptance.
+
+Exit gate: Contract 01 commercial progression/resolution works natively **and** its player-facing screens preserve recognisable MineIT hierarchy/workflows with approved refinements.
 
 Detailed record: [`migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md`](./migration/PHASE_6_CONTRACTS_TRADE_EVENTS.md).
 
-### Phase 7 — Portfolio and multi-colony
+### Phase 7 — Portfolio and multi-colony vertical slices
 
-- [ ] portfolio state;
-- [ ] switching;
+Phase 7 is no longer a backend-only portfolio phase followed by a later UI pass. Start from the current web Colonies/Portfolio player flows and migrate each complete screen/interaction with its required domain functionality.
+
+Expected slices include:
+
+- [ ] Colonies/Portfolio screen layout and navigation based on the current web UI;
+- [ ] portfolio state ownership required by that screen;
+- [ ] colony switching;
 - [ ] inactive-colony simulation;
 - [ ] local state capture;
 - [ ] global date;
 - [ ] cross-colony events;
-- [ ] colony loss/game-over;
-- [ ] multi-colony UI.
+- [ ] colony loss/game-over behaviour and presentation;
+- [ ] multi-colony UI/actions completed and device-validated.
 
-Exit gate: representative multi-colony fixtures round-trip and simulate correctly.
+Exit gate: representative multi-colony fixtures round-trip/simulate correctly **and** the complete Colonies/Portfolio flows are usable natively with recognisable MineIT layout.
 
-### Phase 8 — Ships, expansion and ship market
+### Phase 8 — Ships, expansion and ship-market vertical slices
 
-- [ ] fleet/founding ship;
-- [ ] cargo/passengers/accommodation;
-- [ ] docked/landed/travel state;
-- [ ] factory-new catalogue/procurement;
-- [ ] transport orders;
-- [ ] star/system map;
-- [ ] current navigation;
+Migrate the current ship/expansion experience screen-by-screen, adding each missing backend capability in the same slice rather than creating the whole fleet backend and deferring its player UI.
+
+Expected slices include:
+
+- [ ] fleet/founding-ship screen and underlying fleet state;
+- [ ] cargo/passengers/accommodation UI + rules;
+- [ ] docked/landed/travel presentation + state;
+- [ ] factory-new ship catalogue/market UI + procurement;
+- [ ] transport orders UI + domain behaviour;
+- [ ] star/system map and navigation flows;
+- [ ] current Fuel/location/travel behaviour;
 - [ ] integrate newly approved future ship systems only when their roadmap work is deliberately taken on.
 
-Exit gate: current ship/fleet/market regression scenarios pass natively.
+Exit gate: current ship/fleet/market regression scenarios pass natively **and** the corresponding player-facing ship/expansion flows are complete and device-validated.
 
-### Phase 9 — Remaining UI parity and consistency closure
+### Phase 9 — Remaining feature slices and final UI parity/consistency closure
 
-- [ ] company/corporation;
-- [ ] contract board;
-- [ ] technology/engineering;
-- [ ] buyers;
-- [ ] survival warnings;
-- [ ] trade/reserves;
-- [ ] ship controls;
-- [ ] overlays/toasts/dialogs;
+Phase 9 is primarily closure/audit. Major UIs should no longer be deferred here if their domain feature was migrated in Phase 7/8 or another earlier slice.
+
+Remaining independent slices may include:
+
+- [ ] Company/Corporation;
+- [ ] Contract Board if still separate from completed contract flows;
+- [ ] Technology/Engineering;
+- [ ] remaining survival-warning flows;
 - [ ] onboarding/help;
-- [ ] lost-colony/game-over;
-- [ ] full consistency audit;
-- [ ] landscape/large-screen sanity.
+- [ ] remaining overlays/toasts/dialogs;
+- [ ] any remaining web-only feature screen.
 
-Exit gate: no required web-only player flow and no major known visual/interaction inconsistency remains.
+Final closure includes:
+
+- [ ] screen-by-screen parity matrix against current web `develop`;
+- [ ] full design-system consistency audit;
+- [ ] confirm no migrated screen has accidental large layout drift;
+- [ ] confirm all deliberate layout changes are intentional and useful;
+- [ ] landscape/large-screen sanity;
+- [ ] final accessibility/navigation consistency pass.
+
+Exit gate: no required web-only player flow remains, no major accidental visual/interaction divergence remains, and deliberate native refinements are consistent with the MineIT design language.
 
 ### Phase 10 — Production hardening and cutover
 
@@ -793,7 +859,7 @@ Examples include:
 - ship cargo/passengers;
 - web v16 import.
 
-Compare gameplay meaning, not object ordering, DOM shape or irrelevant floating-point formatting.
+Compare gameplay meaning, not object ordering, DOM shape or irrelevant floating-point formatting. UI/layout parity is reviewed separately against the web screen hierarchy and representative screenshots/device states rather than by comparing DOM structure.
 
 ## 19. Test migration map
 
@@ -804,7 +870,7 @@ Compare gameplay meaning, not object ordering, DOM shape or irrelevant floating-
 | save round-trip | serialization/migration/recovery fixtures |
 | long simulation soak | deterministic JVM soak tests |
 | browser interaction probes | Compose instrumentation |
-| presentation regression | Compose screenshot tests |
+| presentation regression | Compose screenshot tests + screen-hierarchy review |
 | mobile viewport probes | device/configuration screenshot/instrumentation matrix |
 | lifecycle soak | ViewModel/navigation/lifecycle tests |
 | canvas gesture probes | Compose focused gesture tests |
@@ -828,7 +894,8 @@ These preserve intended gameplay unless separately logged:
 - build-time Universe snapshot validation;
 - consistent Compose design system;
 - development-only reproducibility diagnostics;
-- Android-native accessibility/back/haptic behaviour.
+- Android-native accessibility/back/haptic behaviour;
+- low-risk UI refinements that preserve screen purpose/hierarchy and improve usability.
 
 KISS/YAGNI still applies: do not implement abstractions without a present migration or known-roadmap need.
 
@@ -850,50 +917,58 @@ Fix browser-only implementation debt natively without changing gameplay semantic
 
 Route material rule/balance/progression changes through discovery/backlog unless explicitly approved as migration work.
 
+For UI, small native refinements that preserve the same player flow/hierarchy do not require a divergence entry. A material change to screen workflow, available decisions, information priority or gameplay meaning should be deliberately reviewed and recorded where appropriate.
+
 All deliberate semantic differences are recorded in [`migration/INTENTIONAL_DIVERGENCES.md`](./migration/INTENTIONAL_DIVERGENCES.md).
 
 The Phase 2 calendar change from 365 to 360 is a correction of an accidental native parity defect and therefore is **not** an intentional divergence.
 
 ## 22. Branch/delivery workflow
 
-For each migration slice:
+For each remaining migration slice:
 
-1. branch from current Android `main`;
+1. branch from the current accepted Android `main` baseline unless continuing an unaccepted current phase;
 2. read Android `AGENTS.md` and this guide;
 3. read relevant `docs/migration/` decision/status files;
-4. read source MineIT `AGENTS.md` and relevant source/tests;
-5. record the exact source baseline;
-6. add parity/regression fixtures first where valuable;
-7. implement one canonical native owner;
-8. migrate UI after/when the domain capability exists;
-9. run focused tests;
-10. run full Android CI;
-11. produce an APK for hands-on checks when useful;
-12. update migration docs/status;
-13. merge the exact validated head after acceptance/phase completion.
+4. read source MineIT `AGENTS.md`;
+5. inspect the current web screen's HTML/view, CSS and `js/ui/` controller as first-class migration inputs;
+6. inspect the relevant web domain owners/tests and record the exact source baseline;
+7. document/decide what the screen preserves, deliberately refines or replaces;
+8. identify which backend capability already exists and what is actually missing;
+9. add parity/regression fixtures first where valuable;
+10. implement missing gameplay only in the canonical native domain/application owners;
+11. implement the Compose screen using shared MineIT design primitives and the web hierarchy as the starting layout;
+12. add interaction/presentation coverage where applicable;
+13. run focused tests and full Android CI;
+14. produce an APK and validate the complete slice hands-on;
+15. update migration docs/status;
+16. merge the exact validated head after acceptance/phase completion.
 
-Avoid giant migration branches containing unrelated phases.
+Avoid giant migration branches containing unrelated phases or several half-finished screens.
 
-## 23. Definition of done for a migrated feature
+## 23. Definition of done for a migrated feature/screen
 
-A feature is migrated only when applicable items are true:
+A feature/screen is migrated only when applicable items are true:
 
-- [ ] source owner/tests inspected;
-- [ ] native semantic owner clear;
+- [ ] source HTML/view, CSS and UI/controller inspected for player-facing work;
+- [ ] source domain owner/tests inspected;
+- [ ] preserve/refine/replace UI decisions are understood;
+- [ ] native semantic owner is clear;
 - [ ] gameplay implemented without UI ownership leakage;
 - [ ] save/import/migration handled where needed;
 - [ ] parity/domain regression coverage exists;
-- [ ] important UI interaction coverage exists when applicable;
-- [ ] design-system conventions used rather than isolated styling when production UI is involved;
+- [ ] important UI interaction/presentation coverage exists when applicable;
+- [ ] web layout/information hierarchy is recognisable unless a deliberate refinement was chosen;
+- [ ] design-system conventions are used rather than isolated styling;
 - [ ] no duplicate temporary production implementation remains;
-- [ ] intentional divergences recorded;
-- [ ] Android CI green;
-- [ ] hands-on test possible where relevant;
+- [ ] intentional divergences are recorded where required;
+- [ ] Android CI is green on the exact validation head;
+- [ ] hands-on test completed where relevant;
 - [ ] migration checklist/status updated.
 
 ## 24. Production cutover criteria
 
-Do not retire the web implementation as behavioural reference until:
+Do not retire the web implementation as behavioural/layout reference until:
 
 1. Contract 01 starts, plays, saves, reloads and completes.
 2. Survival/economy parity fixtures pass.
@@ -908,8 +983,9 @@ Do not retire the web implementation as behavioural reference until:
 11. Lifecycle/process recreation cannot silently lose valid state.
 12. Production signing is complete.
 13. No required web-only player flow remains.
-14. Consistency audit has no major unresolved visual/interaction split.
-15. Hands-on approval is given on a production-like build.
+14. Screen-by-screen review has no major accidental layout/information-hierarchy divergence.
+15. Deliberate native UI improvements are consistent and approved through hands-on review.
+16. Hands-on approval is given on a production-like build.
 
 ## 25. Current migration status
 
@@ -937,15 +1013,19 @@ Do not retire the web implementation as behavioural reference until:
 
 ### Current phase
 
-**Phase 6 — trade, contracts and commercial events** has completed its implementation/regression/build/signing checkpoint on `feature/migration-phase-6`.
+**Phase 6 — trade, contracts and commercial events** has completed its canonical backend/domain, persistence, regression, build and signing implementation on `feature/migration-phase-6`.
 
-The native domain now contains canonical Corporate Ship trade, reserve/quality pricing, colonist transfer, Contract 01 deadline/decision lifecycle, buyer offers/contracts/recurring collection ships, relationship consequences, corporate-event ordering/recovery and durable Game Log ownership. `CommercialDayService` coordinates these systems after the canonical Phase 3 daily engine rather than creating a second simulation path. Native saves are v5. The `0.7.0-migration` signed APK is the remaining hands-on acceptance check after the final documentation head receives full CI.
+`0.7.0-migration` was physically reviewed and confirmed that the functionality is progressing, but it also exposed that some native screens had drifted too far from the current web layout/information hierarchy. Phase 6 therefore remains unaccepted while Colony Details, Corporate Ship/Trade, Contract, Buyers and Game Log are refined as complete web-referenced UI vertical slices over the existing canonical backend.
+
+### Migration-method change adopted during Phase 6
+
+The earlier backend-heavy phases were appropriate to establish trustworthy native foundations. From the Phase 6 refinement onward, migration is **UI-led vertical feature work**: inspect the old screen and its backend together, preserve the successful layout/workflow, deliberately improve weak areas, add only the missing domain functionality required for that screen, and validate the complete slice before moving on.
 
 ### Next milestone after Phase 6 acceptance
 
-**Phase 7 — portfolio and multi-colony.**
+**Phase 7 — Portfolio and multi-colony vertical slices.**
 
-Phase 7 will migrate portfolio ownership, colony switching, inactive-colony simulation/local state capture, cross-colony events and multi-colony lifecycle while preserving the Phase 0–6 canonical owners.
+Start from the existing web Colonies/Portfolio screens and workflows, then migrate the UI and the required portfolio/simulation/state functionality together. Do not build a large invisible multi-colony backend and defer its real player UI to Phase 9.
 
 ## 26. Reference notes
 
@@ -962,7 +1042,8 @@ At the current migration baseline:
 - Phase 3 daily survival/simulation is accepted;
 - Phase 4 construction/Power/Spaceport/Headquarters is accepted;
 - Phase 5 production native UI/map/design system is accepted and is the current `main` baseline;
-- Phase 6 trade/contracts/buyers/commercial-events/Game Log implementation has passed its implementation CI checkpoint and awaits final documentation CI plus hands-on APK acceptance;
+- Phase 6 trade/contracts/buyers/commercial-events/Game Log backend implementation is regression/build/signing green, but the phase remains unaccepted pending web-layout-based UI refinement and a revised hands-on build;
+- from Phase 6 refinement onward, web HTML/views + CSS + UI controllers are first-class migration references alongside domain owners/tests;
 - realistic web-save coverage includes multi-colony state, player-ship cargo/passengers/Fuel, engineering deployments, scan history and quality bands;
 - current web simulation includes Headquarters/Power behaviour implemented before the migration baseline;
 - the future resource-economy discovery remains separate from parity migration but informs permanent model shape;
