@@ -19,6 +19,20 @@ object NativeSaveV1ToV2 : NativeSaveMigration {
     )
 }
 
+/**
+ * Phase 3 adds durable survival/development fields with semantic defaults and changes population
+ * to a fractional-safe numeric model. JSON integer population values remain valid doubles, so the
+ * ordered migration only advances the envelope version and lets serialization apply the defaults.
+ */
+object NativeSaveV2ToV3 : NativeSaveMigration {
+    override val fromVersion: Int = 2
+    override val toVersion: Int = 3
+
+    override fun migrate(input: JsonObject): JsonObject = JsonObject(
+        input + ("formatVersion" to JsonPrimitive(toVersion)),
+    )
+}
+
 class NativeSaveMigrationChain(
     private val currentVersion: Int = NativeSaveFormat.CURRENT_VERSION,
     migrations: List<NativeSaveMigration> = defaultMigrations(currentVersion),
@@ -68,6 +82,7 @@ class NativeSaveMigrationChain(
     companion object {
         private fun defaultMigrations(currentVersion: Int): List<NativeSaveMigration> = buildList {
             if (currentVersion >= 2) add(NativeSaveV1ToV2)
+            if (currentVersion >= 3) add(NativeSaveV2ToV3)
         }
     }
 }
