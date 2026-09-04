@@ -15,7 +15,7 @@ internal object TestGameStates {
     val colonyId = ColonyId("test-colony-1")
 
     fun foundationState(
-        cash: Long = 500_000,
+        cash: Double = 500_000.0,
         population: Double = 120.0,
         date: GameDate = GameDate(1, 1),
     ): GameState = GameState(
