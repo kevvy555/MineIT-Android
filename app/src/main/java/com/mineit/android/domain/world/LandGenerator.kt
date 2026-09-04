@@ -75,18 +75,6 @@ class LandGenerator {
         )
     }
 
-    fun settle(candidate: LandingSiteCandidate): WorldState = WorldState(
-        landingCandidates = emptyList(),
-        selectedLandingSiteIndex = candidate.index,
-        tiles = candidate.cells.map { cell ->
-            WorldTile(
-                coordinate = cell.coordinate,
-                terrain = cell.terrain,
-                terrainVariant = cell.variant,
-            )
-        },
-    )
-
     fun terrainYieldFactor(terrain: TerrainType, category: com.mineit.android.domain.resources.ResourceCategory): Double = when {
         terrain == TerrainType.MOUNTAIN && category == com.mineit.android.domain.resources.ResourceCategory.ORE -> 1.12
         terrain == TerrainType.HILL && category == com.mineit.android.domain.resources.ResourceCategory.BUILD -> 1.12
