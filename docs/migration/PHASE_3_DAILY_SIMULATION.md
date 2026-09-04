@@ -1,16 +1,18 @@
 # MineIT Android Migration — Phase 3 Daily Simulation and Colony Survival
 
 **Phase:** 3 — Colony survival and daily simulation  
-**Status:** Implementation complete — `0.4.0-migration` hands-on validation pending  
+**Status:** COMPLETE — `0.4.0-migration` hands-on validation accepted and baseline promoted to `main`  
 **Started:** 4 September 2026  
+**Accepted:** 4 September 2026  
 **Source behavioural baseline:** `kevvy555/MineIT` commit `9e58983adaa7a15cd525451266ce9df3c17ae886`, game `5.13.15`, web save `16`  
 **Android branch:** `feature/migration-phase-3`  
+**Accepted Android baseline:** `main` at `e8f11b44dddca421baeab5f80e0afc6d60e04be1`  
 **Android version:** `0.4.0-migration` / version code `8`  
 **Native save format:** `3`
 
 ## Goal
 
-Replace the Phase 2 survey-only day scaffolding with one canonical native daily simulation owner covering the current web game's resource collection, resource consumption, Power, Industry, workforce, survival and mortality behavior.
+Replace the Phase 2 survey-only day scaffolding with one canonical native daily simulation owner covering the current web game's resource collection, resource consumption, Power, Industry, workforce, Food, mortality, depletion, accidents, engineering and related daily effects.
 
 The simulation must remain pure Kotlin and deterministic with respect to its inputs. Android lifecycle/rendering/timers may request days but must never define gameplay results.
 
@@ -291,6 +293,8 @@ Phase 3 regression coverage includes:
 
 The final Phase 3 implementation/documentation head `373673c70a5f70f30379040ebe180c734d6f8be0` passed Android CI run `33858782466`. The run completed all JVM tests and APK assembly successfully, verified the persistent development signer, and uploaded the debug APK artifact.
 
+The `0.4.0-migration` APK was subsequently validated hands-on on the target Android device and accepted. The accepted Phase 3 branch head was promoted to `main`; Phase 4 was then branched from that exact baseline.
+
 ## Explicit non-goals retained
 
 Phase 3 does **not** implement:
@@ -321,6 +325,7 @@ Phase 3 does **not** implement:
 - [x] 25-year supplied-colony soak fixture exists;
 - [x] Phase 2 survey-only day path is replaced rather than kept in parallel;
 - [x] final Phase 3 implementation/documentation head passed Android CI, signer verification and artifact upload;
-- [ ] `0.4.0-migration` receives hands-on device validation.
+- [x] `0.4.0-migration` received hands-on device validation and was accepted;
+- [x] accepted Phase 3 head was promoted to `main` before Phase 4 began.
 
-Phase 3 remains on its feature branch until `0.4.0-migration` hands-on validation is accepted. After acceptance, update the migration guide/status, fast-forward the accepted Phase 3 head to `main`, and begin Phase 4 from that exact accepted baseline.
+Phase 3 is closed. Phase 4 owns the next construction/Headquarters slice while preserving this accepted simulation baseline.
