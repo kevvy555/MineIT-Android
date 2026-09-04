@@ -54,30 +54,21 @@ class GameSession(
 
         val nextState = transition(mutableState.value)
         mutableState.value = nextState
-        val nextRevision = mutableDiagnostics.value.revision + 1
         val saveResult = persistence.save(nextState)
-
-        mutableDiagnostics.value = when (saveResult) {
-            is PersistenceSaveResult.Success -> GameSessionDiagnostics(
-                revision = nextRevision,
-                lastAction = label,
-                persistenceState = PersistenceState.SAVED,
-                loadedFrom = mutableDiagnostics.value.loadedFrom,
-                recoveredFromBackup = mutableDiagnostics.value.recoveredFromBackup,
-                saveMetadata = saveResult.metadata,
-            )
-            is PersistenceSaveResult.Failure -> GameSessionDiagnostics(
-                revision = nextRevision,
-                lastAction = label,
-                persistenceState = PersistenceState.FAILED,
-                persistenceMessage = saveResult.message,
-                loadedFrom = mutableDiagnostics.value.loadedFrom,
-                recoveredFromBackup = mutableDiagnostics.value.recoveredFromBackup,
-                saveMetadata = mutableDiagnostics.value.saveMetadata,
-            )
-        }
-
+        recordSave(label, saveResult, clearLoadHistory = false)
         GameSessionCommitResult(nextState, saveResult)
+    }
+
+    suspend fun reset(
+        label: String,
+        state: GameState,
+    ): GameSessionCommitResult = mutex.withLock {
+        require(label.isNotBlank()) { "GameSession reset label must not be blank." }
+
+        mutableState.value = state
+        val saveResult = persistence.reset(state)
+        recordSave(label, saveResult, clearLoadHistory = true)
+        GameSessionCommitResult(state, saveResult)
     }
 
     suspend fun persistCurrentState(): PersistenceSaveResult = mutex.withLock {
@@ -131,6 +122,34 @@ class GameSession(
                 )
                 loadResult
             }
+        }
+    }
+
+    private fun recordSave(
+        label: String,
+        saveResult: PersistenceSaveResult,
+        clearLoadHistory: Boolean,
+    ) {
+        val previous = mutableDiagnostics.value
+        val nextRevision = previous.revision + 1
+        mutableDiagnostics.value = when (saveResult) {
+            is PersistenceSaveResult.Success -> GameSessionDiagnostics(
+                revision = nextRevision,
+                lastAction = label,
+                persistenceState = PersistenceState.SAVED,
+                loadedFrom = if (clearLoadHistory) null else previous.loadedFrom,
+                recoveredFromBackup = if (clearLoadHistory) false else previous.recoveredFromBackup,
+                saveMetadata = saveResult.metadata,
+            )
+            is PersistenceSaveResult.Failure -> GameSessionDiagnostics(
+                revision = nextRevision,
+                lastAction = label,
+                persistenceState = PersistenceState.FAILED,
+                persistenceMessage = saveResult.message,
+                loadedFrom = if (clearLoadHistory) null else previous.loadedFrom,
+                recoveredFromBackup = if (clearLoadHistory) false else previous.recoveredFromBackup,
+                saveMetadata = previous.saveMetadata,
+            )
         }
     }
 }
