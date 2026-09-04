@@ -67,17 +67,27 @@ enum class ColonyStatus {
 data class ColonyState(
     val id: ColonyId,
     val name: String,
-    val population: Int,
+    val population: Double,
     val seed: Long,
     val inventory: Inventory = Inventory(),
     val contract: ContractState? = null,
     val status: ColonyStatus = ColonyStatus.PLAYING,
     val technology: TechnologyLevels = TechnologyLevels(),
     val world: WorldState = WorldState(),
+    val emergencyMode: Boolean = false,
+    val foodStarvationDays: Int = 0,
+    /**
+     * Durable staged ownership until the full ship domain is migrated. It represents the
+     * canonical founding ship being physically docked at this colony and therefore able
+     * to provide its current 50 Industry support. Phase 8 will migrate this fact into the
+     * full fleet model rather than keeping two independent ship states.
+     */
+    val foundingShipDocked: Boolean = true,
 ) {
     init {
         require(name.isNotBlank()) { "Colony name must not be blank." }
-        require(population >= 0) { "Colony population must not be negative." }
+        require(population.isFinite() && population >= 0.0) { "Colony population must not be negative." }
+        require(foodStarvationDays >= 0) { "Food starvation days must not be negative." }
         require(contract == null || contract.uid == id.value) {
             "Colony contract uid must match the colony id."
         }
