@@ -32,7 +32,7 @@ class NewGameFactory(
         )
         return GameState(
             date = GameDate(year = 1, day = 1),
-            company = CompanyState(cash = MineItConfig.START_CASH, reputation = 0, technology = TechnologyLevels()),
+            company = CompanyState(cash = MineItConfig.START_CASH, reputation = 0.0, technology = TechnologyLevels()),
             colonies = listOf(colony),
             activeColonyId = colonyId,
         )
