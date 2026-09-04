@@ -1,5 +1,6 @@
 package com.mineit.android.domain.model
 
+import com.mineit.android.domain.buyers.BuyerMarketState
 import com.mineit.android.domain.colony.HeadquartersIdentityState
 import com.mineit.android.domain.contracts.ContractState
 import com.mineit.android.domain.events.CorporateEventQueueState
@@ -51,6 +52,7 @@ data class CompanyState(
     val wins: Int = 0,
     val gameOver: Boolean = false,
     val technology: TechnologyLevels = TechnologyLevels(),
+    val buyers: BuyerMarketState = BuyerMarketState(),
 ) {
     init {
         require(cash.isFinite()) { "Company cash must be finite." }
