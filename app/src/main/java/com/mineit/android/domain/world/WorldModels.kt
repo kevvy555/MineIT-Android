@@ -47,22 +47,20 @@ enum class DevelopmentKind {
     @SerialName("headquarters") HEADQUARTERS,
 }
 
-/**
- * Durable physical development attached to a world tile.
- *
- * Phase 3 consumes this model for simulation. Phase 4 adds the player-facing
- * construction/upgrade/demolition actions; it must extend this owner rather than
- * introduce a second building/site representation.
- */
+/** Permanent physical development state shared by construction and simulation. */
 @Serializable
 data class TileDevelopment(
     val kind: DevelopmentKind,
     val level: Int = 1,
     val productionStopped: Boolean = false,
     val constructionComplete: Boolean = true,
+    val investedBuild: Double = 0.0,
+    val investedOre: Double = 0.0,
 ) {
     init {
         require(level in 1..5) { "Tile development level must be between 1 and 5." }
+        require(investedBuild.isFinite() && investedBuild >= 0.0) { "Invested Build must be non-negative." }
+        require(investedOre.isFinite() && investedOre >= 0.0) { "Invested Ore must be non-negative." }
     }
 }
 
@@ -104,6 +102,8 @@ data class WorldTile(
     val revealed: Boolean = false,
     val lastScannedAtLevel: Int = 0,
     val resourceExhausted: Boolean = false,
+    val exhaustedResourceId: ResourceId? = null,
+    val resourceCovered: Boolean = false,
     val deposit: ResourceDeposit? = null,
     val development: TileDevelopment? = null,
 )
