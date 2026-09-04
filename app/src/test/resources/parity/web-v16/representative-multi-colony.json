@@ -1,0 +1,359 @@
+{
+  "metadata": {
+    "name": "representative-multi-colony-v16",
+    "description": "Representative MineIT web save shape covering multi-colony state, inventory quality bands, scan history, Headquarters state, a pending event, engineering deployment and a player ship.",
+    "source": {
+      "repository": "kevvy555/MineIT",
+      "branch": "develop",
+      "commit": "9e58983adaa7a15cd525451266ce9df3c17ae886",
+      "gameVersion": "5.13.15",
+      "saveVersion": 16
+    }
+  },
+  "state": {
+    "version": 16,
+    "year": 3,
+    "day": 42,
+    "speed": 1,
+    "company": {
+      "cash": 987654,
+      "rep": 24,
+      "wins": 0,
+      "earn": 125000,
+      "licenses": [],
+      "tech": {
+        "housing": 3,
+        "power": 4,
+        "food": 2,
+        "industry": 3,
+        "mining": 5,
+        "scanning": 4
+      },
+      "nextColonyNumber": 3,
+      "gameOver": false,
+      "pendingEvents": [
+        {
+          "id": "fixture-event-1",
+          "type": "ship",
+          "colonyId": "fixture-colony-2",
+          "colonyName": "Koplin Secondary",
+          "absoluteDay": 763
+        }
+      ],
+      "eventReturnColonyId": null,
+      "eventResumeSpeed": 1,
+      "expansion": {
+        "ships": [
+          {
+            "id": "fixture-founding-ship",
+            "name": "Pioneer One",
+            "source": "charter-issued",
+            "classId": "ship-class-asterion-pioneer-colony-transport",
+            "status": "docked",
+            "colonyId": "fixture-colony-1",
+            "systemId": "koplin-home",
+            "targetSystemId": null,
+            "passengers": 12,
+            "cargo": {
+              "food:fungal": 180,
+              "build:fiber": 90
+            },
+            "fuel": 140
+          }
+        ],
+        "systems": []
+      }
+    },
+    "gameLog": {
+      "nextId": 2,
+      "events": [
+        {
+          "id": 1,
+          "absoluteDay": 1,
+          "year": 1,
+          "day": 1,
+          "type": "corporation-founded",
+          "message": "Fixture corporation founded.",
+          "colonyId": "fixture-colony-1",
+          "colonyName": "Koplin Prospect",
+          "data": {}
+        }
+      ],
+      "telemetry": []
+    },
+    "portfolio": {
+      "activeColonyId": "fixture-colony-1",
+      "colonies": [
+        {
+          "id": "fixture-colony-1",
+          "name": "Koplin Prospect",
+          "createdAt": 1788476400000,
+          "data": {
+            "colonyId": "fixture-colony-1",
+            "seed": 123456789,
+            "contract": {
+              "uid": "fixture-colony-1",
+              "colonyName": "Koplin Prospect",
+              "name": "Contract 01",
+              "arch": "temperate",
+              "colonyTier": 1,
+              "startAbsoluteDay": 1,
+              "foundedAbsoluteDay": 1,
+              "ended": false,
+              "completed": false
+            },
+            "pop": 120,
+            "status": "playing",
+            "camera": { "x": -4, "y": -4 },
+            "tiles": {},
+            "scans": [],
+            "scanQueue": [],
+            "inventory": {},
+            "trade": { "active": false, "nextArrivalDay": 901, "visits": 4 },
+            "colony": {
+              "housingCapacity": 150,
+              "housingLevel": 2,
+              "industryLevel": 2,
+              "emergencyMode": false,
+              "transportOrders": [],
+              "foundingShipId": "fixture-founding-ship",
+              "commandHandoverComplete": true,
+              "primaryHeadquartersId": "hq-1",
+              "primaryHeadquartersEver": true
+            },
+            "metrics": {}
+          }
+        },
+        {
+          "id": "fixture-colony-2",
+          "name": "Koplin Secondary",
+          "createdAt": 1788476500000,
+          "data": {
+            "colonyId": "fixture-colony-2",
+            "seed": 987654321,
+            "contract": {
+              "uid": "fixture-colony-2",
+              "colonyName": "Koplin Secondary",
+              "name": "Secondary Charter",
+              "arch": "arid",
+              "colonyTier": 2,
+              "startAbsoluteDay": 500,
+              "foundedAbsoluteDay": 500,
+              "ended": false,
+              "completed": false
+            },
+            "pop": 76,
+            "status": "playing",
+            "camera": { "x": -4, "y": -4 },
+            "tiles": {},
+            "scans": [],
+            "scanQueue": [],
+            "inventory": {},
+            "trade": { "active": true, "nextArrivalDay": 763, "visits": 1 },
+            "colony": {
+              "housingCapacity": 100,
+              "housingLevel": 1,
+              "industryLevel": 1,
+              "emergencyMode": false,
+              "transportOrders": [],
+              "foundingShipId": null,
+              "commandHandoverComplete": true,
+              "primaryHeadquartersId": null,
+              "primaryHeadquartersEver": false
+            },
+            "metrics": {}
+          }
+        }
+      ]
+    },
+    "colonyId": "fixture-colony-1",
+    "seed": 123456789,
+    "contract": {
+      "uid": "fixture-colony-1",
+      "colonyName": "Koplin Prospect",
+      "name": "Contract 01",
+      "arch": "temperate",
+      "colonyTier": 1,
+      "startAbsoluteDay": 1,
+      "foundedAbsoluteDay": 1,
+      "ended": false,
+      "completed": false,
+      "requiredTech": {
+        "power": 1,
+        "food": 1,
+        "mining": 1,
+        "scanning": 1
+      }
+    },
+    "pop": 120,
+    "status": "playing",
+    "camera": { "x": -4, "y": -4 },
+    "tiles": {
+      "1,1": {
+        "x": 1,
+        "y": 1,
+        "terrain": "plain",
+        "terrainVariant": 1,
+        "revealed": true,
+        "lastScannedAtLevel": 2,
+        "empty": true,
+        "resourceId": null,
+        "developed": false,
+        "development": null
+      },
+      "2,2": {
+        "x": 2,
+        "y": 2,
+        "terrain": "plain",
+        "terrainVariant": 1,
+        "revealed": true,
+        "lastScannedAtLevel": 2,
+        "empty": false,
+        "type": "ore",
+        "resourceId": "surface-iron",
+        "name": "Surface Iron Nodules",
+        "quality": 120,
+        "depositScale": "large",
+        "requiredMiningLevel": 1,
+        "developed": true,
+        "depleted": false,
+        "level": 1,
+        "development": {
+          "kind": "extract",
+          "family": "mine",
+          "level": 1,
+          "investedBuild": 40,
+          "investedOre": 0
+        },
+        "resourceCovered": false,
+        "reserve": 500,
+        "initialReserve": 500
+      }
+    },
+    "scans": [
+      {
+        "x": 3,
+        "y": 3,
+        "daysRemaining": 2,
+        "scanningLevel": 4,
+        "resurvey": false
+      }
+    ],
+    "scanQueue": [
+      { "x": 4, "y": 4 }
+    ],
+    "inventory": {
+      "food:fungal": {
+        "key": "food:fungal",
+        "type": "food",
+        "resourceId": "fungal",
+        "name": "Fungal Shelf",
+        "category": "Food",
+        "amount": 425,
+        "qualityBands": {
+          "excellent": { "amount": 350 },
+          "rare": { "amount": 75 }
+        }
+      },
+      "fuel:biomass": {
+        "key": "fuel:biomass",
+        "type": "fuel",
+        "resourceId": "biomass",
+        "name": "Biomass",
+        "category": "Fuel",
+        "amount": 500,
+        "qualityBands": {
+          "excellent": { "amount": 500 }
+        }
+      },
+      "build:fiber": {
+        "key": "build:fiber",
+        "type": "build",
+        "resourceId": "fiber",
+        "name": "Construction Fibre",
+        "category": "Build",
+        "amount": 250,
+        "qualityBands": {
+          "excellent": { "amount": 250 }
+        }
+      }
+    },
+    "trade": {
+      "active": false,
+      "nextArrivalDay": 901,
+      "visits": 4,
+      "arrivedAt": null,
+      "cargoUsed": 0,
+      "exportUsed": 0,
+      "passengersUsed": 0
+    },
+    "colony": {
+      "housingCapacity": 150,
+      "housingLevel": 2,
+      "industryLevel": 2,
+      "emergencyMode": false,
+      "transportOrders": [],
+      "engineeringDeployments": [
+        {
+          "id": "roundtrip-engineering",
+          "colonyId": "fixture-colony-1",
+          "status": "preparing",
+          "orderAbsoluteDay": 12,
+          "preparationDaysRemaining": 3,
+          "transportCost": 5000,
+          "packageSubtotal": 15000,
+          "paidTotal": 20000,
+          "upgrades": [
+            {
+              "category": "mining",
+              "level": 5,
+              "techId": "mining-5",
+              "name": "Rotary Drilling",
+              "packageCost": 15000
+            }
+          ]
+        }
+      ],
+      "foundingShipId": "fixture-founding-ship",
+      "commandHandoverComplete": true,
+      "primaryHeadquartersId": "hq-1",
+      "primaryHeadquartersEver": true,
+      "headquartersOutage": {
+        "phase": "online",
+        "penalty": 0,
+        "offlineDays": 0,
+        "outageStartedAbsoluteDay": null,
+        "outageStartPenalty": 0,
+        "recoveryStartedAbsoluteDay": null,
+        "recoveryInitialPenalty": 0,
+        "recoveryDaysElapsed": 0,
+        "recoveryDaysRemaining": 0,
+        "lastOutageDays": 0
+      }
+    },
+    "metrics": {
+      "powerCapacity": 75,
+      "powerFactor": 1,
+      "industry": 100,
+      "foodStock": 425,
+      "fuelStock": 500,
+      "oreStock": 0,
+      "buildStock": 250
+    }
+  },
+  "expectedSummary": {
+    "saveVersion": 16,
+    "year": 3,
+    "day": 42,
+    "activeColonyId": "fixture-colony-1",
+    "colonyCount": 2,
+    "population": 120,
+    "cash": 987654,
+    "shipCount": 1,
+    "pendingEventCount": 1,
+    "engineeringDeploymentCount": 1,
+    "knownTileCount": 2,
+    "foodAmount": 425,
+    "foodQualityBandCount": 2
+  }
+}
