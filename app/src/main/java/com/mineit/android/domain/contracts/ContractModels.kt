@@ -60,10 +60,19 @@ data class ContractState(
     val localRevenue: Double = 0.0,
     val localCosts: Double = 0.0,
     val renewals: Int = 0,
+    /** Extra contract years purchased through deadline extensions and renewals. */
+    val extensionYears: Int = 0,
+    /** Number of deadline extensions used; renewals do not consume this counter. */
+    val extensionsUsed: Int = 0,
+    val completionAwarded: Boolean = false,
     val pendingDecision: String? = null,
     val pendingDecisionPreviousStatus: String? = null,
     val ended: Boolean = false,
     val completed: Boolean = false,
+    val failedByContract: Boolean = false,
+    val failureReason: String? = null,
+    val failureYear: Int? = null,
+    val failureDay: Int? = null,
 )
 
 /** Current introductory MineIT contract from the pinned web baseline. */
