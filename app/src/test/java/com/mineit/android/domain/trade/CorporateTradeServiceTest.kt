@@ -61,6 +61,67 @@ class CorporateTradeServiceTest {
     }
 
     @Test
+    fun categorySaleRespectsPerResourceReserveAndDoesNotTouchOtherCategories() {
+        var state = settled(71L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
+        state = service.arrive(state).state
+        val colony = state.activeColony
+        var inventory = colony.inventory.store(ResourceId("gold"), ResourceCategory.ORE, 30.0, quality = 30)
+        inventory = inventory.store(ResourceId("gold"), ResourceCategory.ORE, 10.0, quality = 9_000)
+        inventory = inventory.store(ResourceId("coal"), ResourceCategory.FUEL, 50.0, quality = 9_000)
+        state = state.copy(
+            colonies = state.colonies.map {
+                if (it.id == colony.id) {
+                    colony.copy(
+                        inventory = inventory,
+                        trade = colony.trade.copy(visitExportCapacity = 25.0),
+                    )
+                } else it
+            },
+        )
+        state = service.setColonyTradeReserve(state, 10.0)
+
+        val quote = service.sellCategoryQuote(state, ResourceCategory.ORE)
+        assertEquals(25.0, quote.quantity, .0001)
+        val result = service.sellCategory(state, ResourceCategory.ORE, spaceportServicesAvailable = true)
+
+        assertTrue(result.ok)
+        assertEquals(25.0, result.quantity, .0001)
+        assertEquals(15.0, result.state.activeColony.inventory.find(ResourceId("gold"))!!.amount, .0001)
+        assertEquals(50.0, result.state.activeColony.inventory.find(ResourceId("coal"))!!.amount, .0001)
+        assertEquals(25.0, result.state.activeColony.trade.exportUsed, .0001)
+        assertEquals(.01, result.state.company.reputation, .0001)
+    }
+
+    @Test
+    fun sellAllUsesHighestValueLotsAcrossResourcesBeforeExportRoomRunsOut() {
+        var state = settled(72L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
+        state = service.arrive(state).state
+        val colony = state.activeColony
+        var inventory = colony.inventory.store(ResourceId("surface-iron"), ResourceCategory.ORE, 5.0, quality = 30)
+        inventory = inventory.store(ResourceId("coal"), ResourceCategory.FUEL, 5.0, quality = 9_000)
+        state = state.copy(
+            colonies = state.colonies.map {
+                if (it.id == colony.id) {
+                    colony.copy(
+                        inventory = inventory,
+                        trade = colony.trade.copy(visitExportCapacity = 5.0),
+                    )
+                } else it
+            },
+        )
+
+        val quote = service.sellAllQuote(state)
+        assertEquals(5.0, quote.quantity, .0001)
+        assertEquals(21.0, quote.value, .0001)
+        val result = service.sellAll(state, spaceportServicesAvailable = true)
+
+        assertTrue(result.ok)
+        assertEquals(5.0, result.state.activeColony.inventory.amountFor(ResourceId("surface-iron")), .0001)
+        assertEquals(0.0, result.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
+        assertEquals(5.0, result.state.activeColony.trade.exportUsed, .0001)
+    }
+
+    @Test
     fun buyRespectsCargoCashAndSpaceportGate() {
         var state = settled(9L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
