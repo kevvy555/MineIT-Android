@@ -1,12 +1,11 @@
 # Phase 6 — Contracts, Trade, Commercial Events and Current-Source Refresh
 
-**Status:** Implementation/regression green; revised player-facing validation still required before acceptance  
+**Status:** Implementation/regression and web-layout refinement implemented; revised physical-device validation still required before acceptance  
 **Started:** 4 September 2026  
 **Android branch:** `feature/migration-phase-6`  
 **Accepted Phase 5 base:** `b9364a4a8d7e9566df6e16d5f61e93f83bc6cd8d`  
-**Current implementation checkpoint:** `35a03b32a0f4360a6f50e1a1e870ef9fced3bdc4`  
-**Current checkpoint CI:** Android CI run `33912720951` / run number `275` — success  
-**Current validation build:** `0.7.1-migration` / version code `13`  
+**Current validation-code checkpoint before this documentation update:** `41a3859957cc382d74b0e47093ff41e9a4cb7c54`  
+**Current validation build:** `0.7.2-migration` / version code `14`  
 **Native save format:** `6`  
 **Current web behavioural + UI-layout baseline:** `kevvy555/MineIT` `develop` at `075b3d82fd88334b20b3cfe7d6e2731c8d840533` / game `5.13.22` / web save `16`
 
@@ -53,7 +52,13 @@ Commercial Phase 6 work was based on the relevant canonical owners under `js/dom
 - `js/domain/spaceport-model.js`;
 - `js/data/contracts.js`.
 
-The UI-parity pass additionally treats matching `views/`, CSS and `js/ui/` files as first-class references.
+The UI-parity pass additionally treats matching `views/`, CSS and `js/ui/` files as first-class references. The current refinement specifically reviewed:
+
+- `views/colony-control.html`, `css/adaptive-building-details.css` and the current Colony Control presenter in `ship-preparation-ui.js`;
+- `corporate-trade-ui.js`, `quick-trade-ui.js` and `views/quick-trade-shell.html` plus the Sell/Buy/Colonists fragments;
+- `contract-ui.js` and current contract decision/completion presentation;
+- `buyer-ui.js` and the current Conglomerate Buyers Service catalogue/profile/collection presentation;
+- current Game Log presentation/usage alongside its durable domain owner.
 
 The N05 refresh reviewed the current source establishment path directly, including:
 
@@ -76,13 +81,15 @@ Phase 6 keeps gameplay truth out of Compose:
 - `CorporateEventService` owns durable global event ordering and deduplication;
 - `GameLogService` owns durable monotonic game events;
 - `CommercialDayService` coordinates commercial work after the canonical daily simulation transition;
-- `PlayerFleetService` now owns the durable corporation fleet facts required by N05 establishment;
+- `PlayerFleetService` owns the durable corporation fleet facts required by N05 establishment;
 - `ColonyEstablishmentService` owns the one-time founding-ship-to-colony establishment assessment/actions;
 - `DailySimulationEngine`, `ColonyNetworkService` and Headquarters owners consume the same permanent fleet state for survival/network behaviour;
 - `GameSession` remains the authoritative root state/persistence owner;
 - Compose renders state and dispatches intents only.
 
 The N05 fleet state is deliberately extensible for Phase 8 but does not pre-implement ship market/travel systems.
+
+The Phase 6 UI refinement also removed the unused generic Trade/Contract production presentations from the shared commercial screen. Trade and Contract now each have one dedicated production Compose surface; Buyers/Game Log share only their navigation container.
 
 ## Corporate Ship trade parity
 
@@ -103,6 +110,21 @@ The migrated Corporate Ship loop retains the current source rules represented by
 
 Cash remains `Double`, matching JavaScript Number semantics for fractional pricing.
 
+### Current Corporate Trade presentation
+
+The dedicated native Trade surface preserves the web quick-trade hierarchy:
+
+1. Corporate Trade Ship / docked-arrival state;
+2. Cash, Import, Export and Passenger visit summary;
+3. Sell / Buy / Colonists modes;
+4. four-row paging where applicable;
+5. reserve-aware stock rows and category/all-sell actions;
+6. Buy resource categories and reserve-shortfall actions;
+7. colonist safe/hard transfer projections;
+8. explicit `SHIP DEPARTS` action.
+
+The web audit found two small native defaults that had drifted: the trade amount now starts at **10,000** rather than 100, and Buy opens on **Fuel** rather than All. The native 2×2 summary grid is retained as a deliberate responsive phone refinement of the web four-metric row.
+
 ## Corporate Ship colonist transfer
 
 Corporate Ship passenger transfer remains owned by `CorporateTradeService` and is separate from N05 founding-ship resident movement.
@@ -120,6 +142,18 @@ The current hard limits remain around passenger capacity, Housing and Power/serv
 - applicable cash/liability/reputation consequences belong to the contract owner;
 - pending decisions use the shared corporate-event queue.
 
+### Current Contract presentation
+
+The dedicated `ContractCommercialPanelScreen` was compared against current `contract-ui.js`. It already preserves the source information hierarchy closely enough that a rewrite would create risk without improving parity:
+
+- colony/tier/contract identity and current state first;
+- current Food / Industry / Population objectives and profit context;
+- performance bands;
+- pending action state;
+- renewal/holdover/liability decisions.
+
+It is therefore **retained**, with domain decisions continuing through `ContractService`/corporate events rather than being duplicated in presentation.
+
 ## Buyers and recurring collection ships
 
 The buyer loop remains on permanent native buyer state:
@@ -136,6 +170,23 @@ The buyer loop remains on permanent native buyer state:
 - waiting, final-attempt miss and cancellation are explicit actions;
 - pending buyer events recover from durable state after process recreation.
 
+### Current Buyers presentation
+
+The native Buyers surface now restores the recognisable `Conglomerate Buyers Service` hierarchy from current web `buyer-ui.js`:
+
+- command-network terminal state with `NODE KPL-CN08` / Primary HQ link loss;
+- corporate reputation value and canonical reputation level;
+- existing commitments remain usable during network outage while **new contacts are blocked**;
+- Current Contracts are separated from the Buyer Directory;
+- relationship happiness uses Green / Amber / Red bands;
+- next due date, ready quantity, lateness, fulfilment/miss counts and lifetime revenue are visible;
+- directory supports All / Eligible / Locked filtering;
+- each row exposes buyer/company, resource, quality, load, unit rate, frequency and reputation requirement;
+- compact buyer profile exposes contract value/details before `ENTER CONTRACT`;
+- active collection actions remain Transfer / Wait / Miss, with cancellation subject to existing domain rules.
+
+The current native buyer data model does not yet contain the full Universe-backed portrait/role/home/ship-profile metadata used by the richer web profile. That content belongs with the planned MineIT-Universe/ship data work rather than being fabricated in Compose during parity migration.
+
 ## Corporate events and Game Log
 
 Commercial blocking events use one durable queue with source-compatible priority:
@@ -149,7 +200,7 @@ Commercial blocking events use one durable queue with source-compatible priority
 
 Equivalent keys deduplicate. `CommercialDayService` returns pause state so the application layer can control the clock without presentation owning event truth.
 
-The native UI exposes Trade, Contract, Buyers and Game Log views. These still require final physical-device acceptance after the web-layout refinement pass.
+The Game Log remains a compact reverse-chronological native list. The refinement reduced generic panel weight so date/type/id/message rows read as a log rather than a stack of dashboard cards.
 
 ## Daily orchestration
 
@@ -231,7 +282,7 @@ The test-only `EstablishedColonyFixture` constructs historical established-colon
 
 ### Establishment assessment and handover UI
 
-`ColonyEstablishmentService` now owns the source-compatible establishment phase/checklist:
+`ColonyEstablishmentService` owns the source-compatible establishment phase/checklist:
 
 1. deploy Build + Fuel;
 2. survey land;
@@ -257,7 +308,7 @@ Beginning operations sets only `establishmentAcknowledged` and starts time at 1�
 
 ### Authoritative stacked S/C HUD
 
-The native game header now follows the current source Ship/Colony split for already-migrated operational concepts:
+The native game header follows the current source Ship/Colony split for already-migrated operational concepts:
 
 - Housing: ship accommodation vs planetary Housing;
 - Power: ship `SELF` vs colony generation/demand;
@@ -266,6 +317,42 @@ The native game header now follows the current source Ship/Colony split for alre
 - Food, Build, Fuel and Ore: ship (`S`) and colony (`C`) quantities.
 
 This is presentation of canonical state, not duplicated UI-owned gameplay logic.
+
+## Colony Control web-layout refinement
+
+The earlier native Colony Details sheet was functionally rich but visually behaved like a generic stacked dashboard. Current web Colony Control is instead a compact command hub.
+
+The revised native hierarchy is now:
+
+1. Colony Control hero/status;
+2. outage/handover alerts;
+3. compact Overview metrics;
+4. compact Operations grid in the source order: Command, Power, Workforce, Industry, Spaceport;
+5. Koplin Deep Reach Corporation / command-network link context;
+6. optional `SYSTEM DETAIL` expansion for the deeper Power/workforce/Industry/command metrics that Android already had.
+
+Preserved:
+
+- authoritative native metrics and warning logic;
+- command/HQ continuity state;
+- Android bottom-sheet/back behaviour where it remains appropriate.
+
+Refined:
+
+- four-column Overview on wider phone widths, two columns below 370dp;
+- source-like compact operation tiles;
+- deep diagnostic metrics no longer dominate normal play.
+
+Not fabricated during this slice:
+
+- Colony Services buttons whose destination feature is not yet natively complete. Portfolio/ship service navigation remains owned by the corresponding later vertical slices rather than adding dead controls.
+
+Implementation commits:
+
+- `949fdc310289c2c84a5c2669cebb9486c51274c6` — Colony Control hierarchy;
+- `23b179d5344333ba40131111cf092c850040ae1a` — presentation regression coverage.
+
+Android CI run `33918672340` / run 279 passed tests, APK assembly, signer verification and artifact upload for that checkpoint.
 
 ## Persistence — native save v6
 
@@ -309,25 +396,23 @@ Phase 6/N05 coverage includes:
 - exact stock conservation during bootstrap unload;
 - real Housing/Power/Spaceport resident-transfer gates;
 - establishment acknowledgement remaining independent of command handover;
+- Colony Control presentation hierarchy/status/shortage regressions;
 - all earlier Phase 0–5 regression suites remaining active.
 
 ## CI and validation checkpoints
 
 Earlier commercial implementation checkpoint `9380c130c63ca540e2e778810ff0cac570cd48af` passed Android CI run `33897074590` / run 254.
 
-The N05 baseline refresh was then built incrementally on the same Phase 6 branch. The final current code checkpoint is:
+N05/UI checkpoints:
 
-- commit: `35a03b32a0f4360a6f50e1a1e870ef9fced3bdc4`;
-- Android CI run: `33912720951` / run 275 — **success**;
-- JVM unit/regression tests: success;
-- debug APK assembly: success;
-- persistent development signer verification: success;
-- artifact upload: success;
-- artifact ID: `9952022146`;
-- artifact name: `mineit-android-poc-debug`;
-- artifact ZIP digest: `sha256:94f73c5e1b20e553f0b5c6db7945ca6ad0f566ffc8b4a12ad5488f540d86b04f`.
+- N05 UI commit `35a03b32a0f4360a6f50e1a1e870ef9fced3bdc4` passed run `33912720951` / 275 with artifact `9952022146`;
+- exact N05 documentation head passed run `33913292639` / 277;
+- Colony Control checkpoint `23b179d5344333ba40131111cf092c850040ae1a` passed run `33918672340` / 279;
+- Buyers/commercial-container checkpoint `b456e045f79399d656a069e4ae64b4a59138612d` passed run `33919412819` / 282.
 
-This proves the current N05 source-refresh code/build pipeline. It does **not** constitute Phase 6 physical-device acceptance.
+The final `0.7.2-migration` code adds the audited Corporate Trade defaults/title and version bump after those checkpoints. The exact documentation head created by this update must pass full Android CI before it is used as the device-validation artifact.
+
+None of these CI checkpoints constitute Phase 6 physical-device acceptance.
 
 ## Hands-on feedback and completion target
 
@@ -341,11 +426,11 @@ The agreed correction remains:
 - apply deliberate native improvements for safe areas, accessibility, touch sizing, Back/navigation, sheets/dialogs and responsive sizing;
 - do not introduce materially different layouts merely because Compose makes them convenient.
 
-The N05 handover and stacked S/C HUD were implemented under that same rule and now require device review in context with the rest of the Phase 6 refinement.
+That implementation refinement is now complete for Colony Control, Corporate Trade, Contract, Buyers and Game Log. It still requires physical review before acceptance.
 
 ## Revised hands-on validation target
 
-Install the latest `0.7.1-migration` artifact over the current migration build and validate at least:
+Install the latest **`0.7.2-migration`** artifact over the current migration build and validate at least:
 
 ### New game / N05 establishment
 
@@ -365,19 +450,47 @@ Install the latest `0.7.1-migration` artifact over the current migration build a
 
 ### Existing save compatibility
 
-- an existing `0.7.0-migration` save loads successfully;
+- an existing `0.7.0` or `0.7.1-migration` save loads successfully;
 - its existing colony stock and residents remain ashore rather than being moved back aboard;
 - normal map/survey/building/commercial play remains intact.
 
-### Phase 6 UI parity
+### Colony Control
 
-- Colony Details is recognisably based on current web hierarchy;
-- Corporate Ship/Trade follows the existing web flow;
-- Contract presentation preserves existing hierarchy/decisions;
-- Buyers preserves offer/contract/collection workflow;
-- Game Log remains compact/coherent;
+- opening Colony Control presents the compact hero → Overview → Operations hierarchy rather than the old stack of large diagnostic cards;
+- Command/Power/Workforce/Industry/Spaceport status is readable without scrolling through deep details;
+- `SYSTEM DETAIL` exposes the deeper metrics when wanted;
+- HQ outage/recovery and founding-handover warnings remain prominent;
+- Koplin link state matches the real command network.
+
+### Corporate Trade
+
+- Cash / Import / Export / PAX summary is immediately visible when docked;
+- Sell / Buy / Colonists tabs follow the current web workflow;
+- default trade amount is 10K and Buy opens on Fuel;
+- reserve/category/all-sell actions and four-row paging remain usable on the phone;
 - buy/sell/reserve updates stock/cash correctly;
-- commercial blocking events pause/resume coherently;
+- `SHIP DEPARTS` is explicit and coherent.
+
+### Contract
+
+- contract identity/state is first;
+- Food / Industry / Population objectives and profit are clear;
+- performance bands and pending decisions are visible;
+- renewal/holdover/liability choices still route through durable contract events correctly.
+
+### Buyers
+
+- Conglomerate Buyers Service shows network state, KPL-CN08 context and reputation level;
+- HQ/network outage blocks new contacts but does not disable existing commitments;
+- Current Contracts show happiness band, due date, readiness/late state and relationship history summary;
+- Buyer Directory All / Eligible / Locked filters work coherently;
+- buyer profile shows resource/quality/load/rate/value/frequency/rep requirement before entering a contract;
+- collection Transfer / Wait / Miss / Cancel behaviour remains correct.
+
+### Game Log and lifecycle
+
+- Game Log remains compact and readable;
+- blocking commercial events pause/resume coherently;
 - closing/reopening preserves commercial state and reconstructs unresolved events.
 
 ## Exit gate
@@ -396,10 +509,17 @@ Install the latest `0.7.1-migration` artifact over the current migration build a
 - [x] Native save v6 migration protects existing Android saves.
 - [x] N05 founding handover and S/C HUD implemented.
 - [x] N05 domain/regression coverage passes.
-- [x] current `0.7.1-migration` code passes full Android CI, signer verification and artifact upload on run 275.
 - [x] initial Phase 6 physical-device review completed and layout drift identified.
-- [ ] Colony Details final web-layout review/recreation accepted on device.
-- [ ] Corporate Ship/Trade, Contract, Buyers and Game Log final UI-led refinement accepted on device.
+- [x] Colony Control recreated around the current web hierarchy with deep diagnostics deliberately retained behind `SYSTEM DETAIL`.
+- [x] Corporate Trade audited against current quick-trade shell/flow and aligned where drift remained.
+- [x] Contract presentation audited against current web and retained rather than unnecessarily redesigned.
+- [x] Buyers recreated around the current Conglomerate Buyers Service hierarchy and network/reputation context.
+- [x] Game Log compact presentation refinement completed.
+- [x] unused duplicate generic Trade/Contract production presentations removed.
+- [x] Colony Control checkpoint passed full CI/signing on run 279.
+- [x] Buyers/commercial-container checkpoint passed full CI/signing on run 282.
+- [ ] exact final `0.7.2-migration` documentation head passes full Android CI/signing/artifact upload.
+- [ ] Colony Control / Trade / Contract / Buyers / Game Log revised layouts accepted on physical device.
 - [ ] N05 founding handover/S-C HUD receives physical-device validation.
 - [ ] revised Phase 6 validation APK receives hands-on acceptance.
 
