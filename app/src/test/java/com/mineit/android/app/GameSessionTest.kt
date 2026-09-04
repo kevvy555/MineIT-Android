@@ -43,7 +43,7 @@ class GameSessionTest {
         )
         val expected = runBlocking {
             first.commit("population-update") { state ->
-                val updatedColony = state.activeColony.copy(population = 144)
+                val updatedColony = state.activeColony.copy(population = 144.0)
                 state.copy(
                     colonies = state.colonies.map { colony ->
                         if (colony.id == updatedColony.id) updatedColony else colony
