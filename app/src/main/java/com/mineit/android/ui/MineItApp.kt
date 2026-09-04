@@ -12,6 +12,7 @@ import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.ui.commercial.CommercialPanelScreen
 import com.mineit.android.ui.commercial.CorporateEventDialog
+import com.mineit.android.ui.commercial.TradeCommercialPanelScreen
 import com.mineit.android.ui.theme.MineItTheme
 
 @Composable
@@ -89,33 +90,59 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                 )
 
                 commercialPanel?.let { panel ->
-                    val contracts = viewModel.buyerContracts()
-                    CommercialPanelScreen(
-                        panel = panel,
-                        state = state,
-                        metrics = metrics,
-                        spaceport = spaceport,
-                        contractScore = viewModel.contractScore(),
-                        populationSupport = viewModel.populationSupport(),
-                        tradeDaysUntilArrival = viewModel.tradeDaysUntilArrival(),
-                        buyerOffers = if (panel == CommercialPanel.BUYERS) viewModel.buyerOffers() else emptyList(),
-                        buyerContracts = contracts,
-                        buyerProjections = contracts.mapNotNull { contract -> viewModel.buyerProjection(contract.id)?.let { contract.id to it } }.toMap(),
-                        onSelectPanel = viewModel::openCommercialPanel,
-                        onClose = viewModel::closeCommercialPanel,
-                        onSetReserve = viewModel::setTradeReserve,
-                        onSellResource = viewModel::sellResource,
-                        onBuyResource = viewModel::buyResource,
-                        onTransferColonists = viewModel::transferColonists,
-                        onDepartCorporateShip = viewModel::departCorporateShip,
-                        onAcceptBuyerOffer = viewModel::acceptBuyerOffer,
-                        onTransferBuyer = viewModel::transferBuyerShipment,
-                        onWaitBuyer = viewModel::continueBuyerWaiting,
-                        onMissBuyer = viewModel::resolveBuyerMiss,
-                        onCancelBuyer = viewModel::cancelBuyerContract,
-                        onRenewContract = viewModel::renewContract,
-                        onEndLiability = viewModel::endContractAsLiability,
-                    )
+                    if (panel == CommercialPanel.TRADE) {
+                        TradeCommercialPanelScreen(
+                            state = state,
+                            spaceport = spaceport,
+                            daysUntilArrival = viewModel.tradeDaysUntilArrival(),
+                            cargoCapacity = viewModel.tradeCargoCapacity(),
+                            cargoRemaining = viewModel.tradeCargoRemaining(),
+                            exportCapacity = viewModel.tradeExportCapacity(),
+                            exportRemaining = viewModel.tradeExportRemaining(),
+                            passengerRemaining = viewModel.tradePassengerRemaining(),
+                            colonistProjection = viewModel.tradeColonistProjection(),
+                            sellableAmount = viewModel::tradeSellableAmount,
+                            sellQuote = viewModel::tradeSellQuote,
+                            buyPrice = viewModel::tradeBuyPrice,
+                            onSelectPanel = viewModel::openCommercialPanel,
+                            onClose = viewModel::closeCommercialPanel,
+                            onSetReserve = viewModel::setTradeReserve,
+                            onSellResource = viewModel::sellResource,
+                            onSellCategory = viewModel::sellTradeCategory,
+                            onSellAll = viewModel::sellAllTrade,
+                            onBuyResource = viewModel::buyResource,
+                            onTransferColonists = viewModel::transferColonists,
+                            onDepartCorporateShip = viewModel::departCorporateShip,
+                        )
+                    } else {
+                        val contracts = viewModel.buyerContracts()
+                        CommercialPanelScreen(
+                            panel = panel,
+                            state = state,
+                            metrics = metrics,
+                            spaceport = spaceport,
+                            contractScore = viewModel.contractScore(),
+                            populationSupport = viewModel.populationSupport(),
+                            tradeDaysUntilArrival = viewModel.tradeDaysUntilArrival(),
+                            buyerOffers = if (panel == CommercialPanel.BUYERS) viewModel.buyerOffers() else emptyList(),
+                            buyerContracts = contracts,
+                            buyerProjections = contracts.mapNotNull { contract -> viewModel.buyerProjection(contract.id)?.let { contract.id to it } }.toMap(),
+                            onSelectPanel = viewModel::openCommercialPanel,
+                            onClose = viewModel::closeCommercialPanel,
+                            onSetReserve = viewModel::setTradeReserve,
+                            onSellResource = viewModel::sellResource,
+                            onBuyResource = viewModel::buyResource,
+                            onTransferColonists = viewModel::transferColonists,
+                            onDepartCorporateShip = viewModel::departCorporateShip,
+                            onAcceptBuyerOffer = viewModel::acceptBuyerOffer,
+                            onTransferBuyer = viewModel::transferBuyerShipment,
+                            onWaitBuyer = viewModel::continueBuyerWaiting,
+                            onMissBuyer = viewModel::resolveBuyerMiss,
+                            onCancelBuyer = viewModel::cancelBuyerContract,
+                            onRenewContract = viewModel::renewContract,
+                            onEndLiability = viewModel::endContractAsLiability,
+                        )
+                    }
                 }
 
                 corporateEvent?.let { event ->
