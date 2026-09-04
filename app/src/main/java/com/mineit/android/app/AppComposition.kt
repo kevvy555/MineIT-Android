@@ -8,6 +8,7 @@ import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.colony.HeadquartersService
 import com.mineit.android.domain.colony.SpaceportService
 import com.mineit.android.domain.model.ColonyId
+import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.simulation.DailySimulationEngine
 import com.mineit.android.domain.world.SurveyGameService
@@ -27,11 +28,7 @@ class AppComposition(application: Application) {
         headquartersService = headquartersService,
     )
 
-    private val initialState = newGameFactory.contract01(
-        colonySeed = VALIDATION_SEED,
-        colonyId = ColonyId("intro-$VALIDATION_SEED"),
-        colonyName = "Colony 01",
-    )
+    private val initialState = createNewGame()
 
     val gameSession = GameSession(
         initialState = initialState,
@@ -39,6 +36,12 @@ class AppComposition(application: Application) {
             directory = File(application.filesDir, "game-state"),
             gameVersion = BuildConfig.VERSION_NAME,
         ),
+    )
+
+    fun createNewGame(): GameState = newGameFactory.contract01(
+        colonySeed = VALIDATION_SEED,
+        colonyId = ColonyId("intro-$VALIDATION_SEED"),
+        colonyName = "Colony 01",
     )
 
     companion object {
