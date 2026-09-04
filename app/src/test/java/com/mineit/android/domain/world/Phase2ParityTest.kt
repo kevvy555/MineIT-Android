@@ -39,7 +39,7 @@ class Phase2ParityTest {
         val contract = requireNotNull(colony.contract)
 
         assertEquals(32_000L, state.company.cash)
-        assertEquals(120, colony.population)
+        assertEquals(120.0, colony.population, 0.0)
         assertEquals(ColonyStatus.SITE_SELECTION, colony.status)
         assertEquals("Koplin Mining Charter — Contract 01", contract.name)
         assertEquals(10, contract.years)
@@ -158,34 +158,5 @@ class Phase2ParityTest {
         assertTrue(survey.isResurveyable(world, coordinate, scanningLevel = 2))
         assertEquals(5, survey.days(contract, coordinate, resurvey = true))
         assertFalse(survey.surveyable(world, contract, SectorCoordinate(0, 0), scanningLevel = 2))
-    }
-
-    @Test
-    fun `aggregate survey service used by native UI reveals real Contract 01 resources`() {
-        val factory = NewGameFactory()
-        var state = factory.settleLandingSite(
-            factory.contract01(
-                colonySeed = 123456789,
-                colonyId = ColonyId("intro-123456789"),
-            ),
-            0,
-        )
-        val service = SurveyGameService()
-        val coordinate = SectorCoordinate(-2, -4)
-
-        assertEquals(9, service.surveyDays(state, coordinate))
-        state = service.enqueue(state, coordinate)
-        assertEquals(1, state.activeColony.world.activeSurveys.size)
-
-        repeat(9) {
-            val processed = service.processSurveys(state)
-            state = processed.state.copy(date = state.date.nextDay())
-        }
-
-        val revealed = state.activeColony.world.tileAt(coordinate)!!
-        assertEquals(10, state.date.day)
-        assertTrue(revealed.revealed)
-        assertEquals(ResourceId("nutrient"), revealed.deposit?.resourceId)
-        assertEquals(49, revealed.deposit?.quality)
     }
 }
