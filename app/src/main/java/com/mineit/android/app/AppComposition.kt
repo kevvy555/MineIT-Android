@@ -7,6 +7,7 @@ import com.mineit.android.domain.buyers.BuyerService
 import com.mineit.android.domain.colony.ColonyDevelopmentService
 import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.colony.HeadquartersService
+import com.mineit.android.domain.colony.PopulationSupportService
 import com.mineit.android.domain.colony.SpaceportService
 import com.mineit.android.domain.commercial.CommercialDayService
 import com.mineit.android.domain.contracts.ContractService
@@ -28,6 +29,7 @@ class AppComposition(application: Application) {
     val headquartersService = HeadquartersService()
     val colonyNetworkService = ColonyNetworkService(headquartersService)
     val colonyDevelopmentService = ColonyDevelopmentService(headquartersService)
+    val populationSupportService = PopulationSupportService()
     val spaceportService = SpaceportService()
     val reputationService = ReputationService()
     val corporateTradeService = CorporateTradeService(reputationService)
