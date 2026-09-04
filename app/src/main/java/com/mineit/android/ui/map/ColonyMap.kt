@@ -1,6 +1,6 @@
 package com.mineit.android.ui.map
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,19 +30,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.mineit.android.R
 import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.resources.ResourceCatalogue
 import com.mineit.android.domain.world.DevelopmentKind
@@ -50,8 +48,11 @@ import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.domain.world.SurveyTask
 import com.mineit.android.domain.world.TerrainType
 import com.mineit.android.domain.world.WorldTile
+import com.mineit.android.ui.art.MineItAssetPaths
+import com.mineit.android.ui.art.rememberMineItAssetBitmap
 import com.mineit.android.ui.design.MineItPalette
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 
 @Composable
 fun ColonyMap(
@@ -141,7 +142,7 @@ private fun Modifier.pointerSelect(
     },
 )
 
-private fun coordinateAt(offset: Offset, size: IntSize): SectorCoordinate? {
+internal fun coordinateAt(offset: Offset, size: IntSize): SectorCoordinate? {
     if (size.width <= 0 || size.height <= 0) return null
     if (offset.x < 0f || offset.y < 0f || offset.x >= size.width || offset.y >= size.height) return null
     val column = ((offset.x / size.width) * 8f).toInt().coerceIn(0, 7)
@@ -173,6 +174,7 @@ private fun ColonyMapTile(
             .padding(.75.dp)
             .alpha(if (dimmed) .22f else 1f)
             .clip(shape)
+            .background(terrainFallback(tile.terrain))
             .border(if (selected) 2.dp else 1.dp, borderColor, shape)
             .clickable(onClick = onClick)
             .semantics {
@@ -180,22 +182,16 @@ private fun ColonyMapTile(
                 this.selected = selected
             },
     ) {
-        Image(
-            painter = painterResource(terrainDrawable(tile.terrain, tile.terrainVariant)),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Box(Modifier.fillMaxSize().background(terrainTint(tile.terrain)))
+        TileArtwork(tile, Modifier.fillMaxSize())
         Box(
             Modifier
                 .fillMaxSize()
-                .background(if (tile.revealed) Color.Black.copy(alpha = .28f) else Color.Black.copy(alpha = .54f)),
+                .background(if (tile.revealed) Color.Black.copy(alpha = .18f) else Color.Black.copy(alpha = .46f)),
         )
         Text(
             text = "${tile.coordinate.x},${tile.coordinate.y}",
             modifier = Modifier.align(Alignment.TopStart).padding(2.dp),
-            color = MineItPalette.Text.copy(alpha = .90f),
+            color = MineItPalette.Text.copy(alpha = .92f),
             fontSize = 5.5.sp,
             fontWeight = FontWeight.Bold,
         )
@@ -204,7 +200,7 @@ private fun ColonyMapTile(
             text = label,
             modifier = Modifier.align(Alignment.Center).padding(horizontal = 1.dp),
             color = color,
-            fontSize = if (label.length > 6) 5.1.sp else 6.sp,
+            fontSize = if (label.length > 9) 4.8.sp else 5.8.sp,
             fontWeight = FontWeight.Black,
             textAlign = TextAlign.Center,
             maxLines = 2,
@@ -217,6 +213,51 @@ private fun ColonyMapTile(
                 color = MineItPalette.Critical,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Black,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TileArtwork(tile: WorldTile, modifier: Modifier = Modifier) {
+    val terrain = rememberMineItAssetBitmap(MineItAssetPaths.terrain(tile.terrain, tile.terrainVariant))
+    val resourceFrame = tile.deposit
+        ?.takeIf { tile.revealed && tile.development == null && !tile.resourceExhausted }
+        ?.let { MineItAssetPaths.resourceFrame(it.resourceId.value) }
+    val resourceAtlas = rememberMineItAssetBitmap(if (resourceFrame != null) MineItAssetPaths.RESOURCE_ATLAS else null)
+    val developmentPath = MineItAssetPaths.developmentAtlas(tile)
+    val developmentAtlas = rememberMineItAssetBitmap(developmentPath)
+
+    Canvas(modifier) {
+        terrain?.let { image ->
+            drawImage(
+                image = image,
+                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+            )
+        }
+        if (resourceAtlas != null && resourceFrame != null) {
+            drawImage(
+                image = resourceAtlas,
+                srcOffset = IntOffset(resourceFrame.x, resourceFrame.y),
+                srcSize = IntSize(resourceFrame.width, resourceFrame.height),
+                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+            )
+        }
+        val development = tile.development
+        if (developmentAtlas != null && development != null) {
+            val frameWidth = developmentAtlas.width / 5
+            val frame = (development.level.coerceIn(1, 5) - 1) * frameWidth
+            val insetX = (size.width * .04f).roundToInt()
+            val insetY = (size.height * .04f).roundToInt()
+            drawImage(
+                image = developmentAtlas,
+                srcOffset = IntOffset(frame, 0),
+                srcSize = IntSize(frameWidth, developmentAtlas.height),
+                dstOffset = IntOffset(insetX, insetY),
+                dstSize = IntSize(
+                    (size.width.roundToInt() - insetX * 2).coerceAtLeast(1),
+                    (size.height.roundToInt() - insetY * 2).coerceAtLeast(1),
+                ),
             )
         }
     }
@@ -259,34 +300,9 @@ private fun tileDescription(tile: WorldTile, active: SurveyTask?, queued: Boolea
     }
 }
 
-/**
- * Phase 5 bundles the existing MineIT terrain artwork directly into the APK. Plains preserve all
- * four source variants; hills use the first two source variants. Mountain/lake use the same art
- * texture base with a strong terrain tint until the Universe asset snapshot becomes the canonical
- * Android art source, avoiding a network dependency during migration.
- */
-private fun terrainDrawable(terrain: TerrainType, variant: Int): Int {
-    val normalized = ((variant - 1).mod(4)) + 1
-    return when (terrain) {
-        TerrainType.PLAIN -> when (normalized) {
-            1 -> R.drawable.terrain_plain_1
-            2 -> R.drawable.terrain_plain_2
-            3 -> R.drawable.terrain_plain_3
-            else -> R.drawable.terrain_plain_4
-        }
-        TerrainType.HILL, TerrainType.MOUNTAIN -> if (normalized % 2 == 0) R.drawable.terrain_hill_2 else R.drawable.terrain_hill_1
-        TerrainType.LAKE -> when (normalized) {
-            1 -> R.drawable.terrain_plain_1
-            2 -> R.drawable.terrain_plain_2
-            3 -> R.drawable.terrain_plain_3
-            else -> R.drawable.terrain_plain_4
-        }
-    }
-}
-
-private fun terrainTint(terrain: TerrainType): Color = when (terrain) {
-    TerrainType.PLAIN -> Color(0x182F6B3A)
-    TerrainType.HILL -> Color(0x245C4C25)
-    TerrainType.MOUNTAIN -> Color(0x505A626B)
-    TerrainType.LAKE -> Color(0x70306D96)
+private fun terrainFallback(terrain: TerrainType): Color = when (terrain) {
+    TerrainType.PLAIN -> Color(0xFF334C32)
+    TerrainType.HILL -> Color(0xFF5A5337)
+    TerrainType.MOUNTAIN -> Color(0xFF565C62)
+    TerrainType.LAKE -> Color(0xFF214F68)
 }
