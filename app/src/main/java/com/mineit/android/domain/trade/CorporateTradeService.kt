@@ -8,6 +8,7 @@ import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.reputation.ReputationService
 import com.mineit.android.domain.resources.QualityBand
 import com.mineit.android.domain.resources.ResourceCatalogue
+import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.resources.ResourceQuality
 import com.mineit.android.domain.resources.ResourceStock
 import kotlin.math.floor
@@ -120,6 +121,14 @@ class CorporateTradeService(
         return TradeQuote(quantity, revenue)
     }
 
+    /** Web-parity bulk quote: reserve is applied to every resource, then highest-value quality lots win export room globally. */
+    fun sellAllQuote(state: GameState, processingBonus: Double = 0.0): TradeQuote =
+        sellQuoteForStocks(state, state.activeColony.inventory.resources, processingBonus)
+
+    /** Web-parity category quote using the same global quality/value ordering as Sell All. */
+    fun sellCategoryQuote(state: GameState, category: ResourceCategory, processingBonus: Double = 0.0): TradeQuote =
+        sellQuoteForStocks(state, state.activeColony.inventory.resources.filter { it.category == category }, processingBonus)
+
     fun sell(state: GameState, resourceId: ResourceId, amount: Double, spaceportServicesAvailable: Boolean, processingBonus: Double = 0.0): TradeActionResult {
         val colony = state.activeColony
         if (!colony.trade.active) return TradeActionResult(state, false, "No corporate ship is docked.")
@@ -153,6 +162,26 @@ class CorporateTradeService(
         if (firstExportThisVisit) next = reputationService.awardCorporateExportVisit(next).state
         return TradeActionResult(next, true, "Sold ${formatQty(quote.quantity)} units for £${"%.2f".format(quote.value)}.", quote.quantity, quote.value)
     }
+
+    fun sellAll(state: GameState, spaceportServicesAvailable: Boolean, processingBonus: Double = 0.0): TradeActionResult =
+        sellStocks(
+            state = state,
+            stocks = state.activeColony.inventory.resources,
+            spaceportServicesAvailable = spaceportServicesAvailable,
+            processingBonus = processingBonus,
+        )
+
+    fun sellCategory(
+        state: GameState,
+        category: ResourceCategory,
+        spaceportServicesAvailable: Boolean,
+        processingBonus: Double = 0.0,
+    ): TradeActionResult = sellStocks(
+        state = state,
+        stocks = state.activeColony.inventory.resources.filter { it.category == category },
+        spaceportServicesAvailable = spaceportServicesAvailable,
+        processingBonus = processingBonus,
+    )
 
     fun buy(state: GameState, resourceId: ResourceId, amount: Double, spaceportServicesAvailable: Boolean): TradeActionResult {
         val colony = state.activeColony
@@ -231,6 +260,107 @@ class CorporateTradeService(
         return TradeActionResult(next, true, "Transferred $requested colonists for £${"%.0f".format(cost)}.$warning", requested.toDouble(), cost)
     }
 
+    private fun sellQuoteForStocks(state: GameState, stocks: List<ResourceStock>, processingBonus: Double): TradeQuote {
+        val allowed = stocks.associate { it.resourceId to sellableAmount(state, it.resourceId) }.toMutableMap()
+        val lots = stocks.flatMap { stock ->
+            lotsDescending(stock, processingBonus).map { (band, available, unitPrice) ->
+                BulkSellLot(stock.resourceId, band, available, unitPrice)
+            }
+        }.sortedWith(
+            compareByDescending<BulkSellLot> { it.unitPrice }
+                .thenByDescending { it.available * it.unitPrice },
+        )
+        var room = exportRemaining(state)
+        var quantity = 0.0
+        var revenue = 0.0
+        lots.forEach { lot ->
+            if (room > .0001) {
+                val canSell = (allowed[lot.resourceId] ?: 0.0).coerceAtLeast(0.0)
+                val take = minOf(room, canSell, lot.available)
+                if (take > .0001) {
+                    allowed[lot.resourceId] = canSell - take
+                    room -= take
+                    quantity += take
+                    revenue += take * lot.unitPrice
+                }
+            }
+        }
+        return TradeQuote(quantity, revenue)
+    }
+
+    private fun sellStocks(
+        state: GameState,
+        stocks: List<ResourceStock>,
+        spaceportServicesAvailable: Boolean,
+        processingBonus: Double,
+    ): TradeActionResult {
+        val colony = state.activeColony
+        if (!colony.trade.active) return TradeActionResult(state, false, "No corporate ship is docked.")
+        if (!spaceportServicesAvailable) return TradeActionResult(state, false, SPACEPORT_OFFLINE)
+
+        val allowed = stocks.associate { it.resourceId to sellableAmount(state, it.resourceId) }.toMutableMap()
+        val lots = stocks.flatMap { stock ->
+            lotsDescending(stock, processingBonus).map { (band, available, unitPrice) ->
+                BulkSellLot(stock.resourceId, band, available, unitPrice)
+            }
+        }.sortedWith(
+            compareByDescending<BulkSellLot> { it.unitPrice }
+                .thenByDescending { it.available * it.unitPrice },
+        )
+        var room = exportRemaining(state)
+        var quantity = 0.0
+        var revenue = 0.0
+        val mutableStocks = colony.inventory.resources.associateBy { it.resourceId }.toMutableMap()
+
+        lots.forEach { lot ->
+            if (room > .0001) {
+                val stock = mutableStocks[lot.resourceId] ?: return@forEach
+                val available = stock.qualityBands[lot.band] ?: 0.0
+                val canSell = (allowed[lot.resourceId] ?: 0.0).coerceAtLeast(0.0)
+                val take = minOf(room, canSell, available)
+                if (take > .0001) {
+                    mutableStocks[lot.resourceId] = stock.copy(
+                        qualityBands = stock.qualityBands + (lot.band to (available - take).coerceAtLeast(0.0)),
+                    )
+                    allowed[lot.resourceId] = canSell - take
+                    room -= take
+                    quantity += take
+                    revenue += take * lot.unitPrice
+                }
+            }
+        }
+
+        if (quantity <= .0001) {
+            val reason = if (exportRemaining(state) <= .0001) {
+                "Ship export capacity is exhausted for this visit."
+            } else {
+                "Nothing is available above the colony reserve or export capacity."
+            }
+            return TradeActionResult(state, false, reason)
+        }
+
+        val nextInventory = colony.inventory.copy(
+            resources = colony.inventory.resources.map { mutableStocks.getValue(it.resourceId) },
+        )
+        val firstExportThisVisit = !colony.trade.exportReputationAwarded
+        val nextTrade = colony.trade.copy(
+            exportUsed = colony.trade.exportUsed + quantity,
+            exportReputationAwarded = true,
+        )
+        val nextContract = colony.contract?.copy(localRevenue = colony.contract.localRevenue + revenue)
+        val nextColony = colony.copy(inventory = nextInventory, trade = nextTrade, contract = nextContract)
+        val nextCompany = state.company.copy(cash = state.company.cash + revenue, earnedRevenue = state.company.earnedRevenue + revenue)
+        var next = updateColony(state.copy(company = nextCompany), nextColony)
+        if (firstExportThisVisit) next = reputationService.awardCorporateExportVisit(next).state
+        return TradeActionResult(
+            state = next,
+            ok = true,
+            message = "Sold ${formatQty(quantity)} units for £${"%.2f".format(revenue)}.",
+            quantity = quantity,
+            value = revenue,
+        )
+    }
+
     private fun lotsDescending(stock: ResourceStock, processingBonus: Double): List<Triple<QualityBand, Double, Double>> =
         stock.qualityBands.map { (band, available) -> Triple(band, available, sellPrice(stock.resourceId, band, processingBonus)) }.sortedByDescending { it.third }
 
@@ -238,6 +368,13 @@ class CorporateTradeService(
         state.copy(colonies = state.colonies.map { if (it.id == colony.id) colony else it })
 
     private fun formatQty(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else "%.1f".format(value)
+
+    private data class BulkSellLot(
+        val resourceId: ResourceId,
+        val band: QualityBand,
+        val available: Double,
+        val unitPrice: Double,
+    )
 
     companion object {
         const val SPACEPORT_OFFLINE = "Basic Spaceport services are offline: provide its full 10 Power to enable trade, cargo, passenger and Engineering services."
