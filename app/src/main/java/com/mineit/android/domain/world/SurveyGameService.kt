@@ -3,25 +3,21 @@ package com.mineit.android.domain.world
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.technology.ScanningTechnology
 
-/**
- * Canonical aggregate-level survey owner. It applies SurveyService rules to the active colony
- * without exposing root-state mutation to the UI.
- */
+/** Canonical aggregate-level survey owner. */
 class SurveyGameService(
     private val surveyService: SurveyService = SurveyService(),
 ) {
     fun canSurvey(state: GameState, coordinate: SectorCoordinate): Boolean {
         val colony = state.activeColony
         val contract = colony.contract ?: return false
-        return surveyService.surveyable(
-            world = colony.world,
-            contract = contract,
-            coordinate = coordinate,
-            scanningLevel = colony.technology.scanning,
-        )
+        return surveyService.surveyable(colony.world, contract, coordinate, colony.technology.scanning)
     }
 
-    fun surveyDays(state: GameState, coordinate: SectorCoordinate): Int? {
+    fun surveyDays(
+        state: GameState,
+        coordinate: SectorCoordinate,
+        commandEfficiency: Double = 1.0,
+    ): Int? {
         val colony = state.activeColony
         val contract = colony.contract ?: return null
         if (!surveyService.surveyable(colony.world, contract, coordinate, colony.technology.scanning)) return null
@@ -31,10 +27,15 @@ class SurveyGameService(
             coordinate = coordinate,
             resurvey = surveyService.isResurveyable(colony.world, coordinate, colony.technology.scanning),
             surveyFactor = capability.scanTimeFactor,
+            commandEfficiency = commandEfficiency,
         )
     }
 
-    fun enqueue(state: GameState, coordinate: SectorCoordinate): GameState {
+    fun enqueue(
+        state: GameState,
+        coordinate: SectorCoordinate,
+        commandEfficiency: Double = 1.0,
+    ): GameState {
         val colony = state.activeColony
         val contract = colony.contract ?: return state
         val capability = ScanningTechnology.forLevel(colony.technology.scanning)
@@ -45,11 +46,16 @@ class SurveyGameService(
             scanningLevel = colony.technology.scanning,
             slots = capability.surveySlots,
             surveyFactor = capability.scanTimeFactor,
+            commandEfficiency = commandEfficiency,
         )
         return state.withActiveColony(colony.copy(world = nextWorld))
     }
 
-    fun processSurveys(state: GameState): SurveyGameProcessResult {
+    fun processSurveys(
+        state: GameState,
+        commandEfficiency: Double = 1.0,
+        headquartersContinuityFactor: Double = 1.0,
+    ): SurveyGameProcessResult {
         val colony = state.activeColony
         val contract = colony.contract ?: return SurveyGameProcessResult(state, emptyList())
         val capability = ScanningTechnology.forLevel(colony.technology.scanning)
@@ -60,6 +66,8 @@ class SurveyGameService(
             currentScanningLevel = colony.technology.scanning,
             slots = capability.surveySlots,
             surveyFactor = capability.scanTimeFactor,
+            commandEfficiency = commandEfficiency,
+            headquartersContinuityFactor = headquartersContinuityFactor,
         )
         return SurveyGameProcessResult(
             state = state.withActiveColony(colony.copy(world = result.world)),
