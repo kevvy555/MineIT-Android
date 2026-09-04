@@ -5,6 +5,7 @@ import com.mineit.android.BuildConfig
 import com.mineit.android.data.save.FileGameStatePersistence
 import com.mineit.android.domain.buyers.BuyerService
 import com.mineit.android.domain.colony.ColonyDevelopmentService
+import com.mineit.android.domain.colony.ColonyEstablishmentService
 import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.colony.HeadquartersService
 import com.mineit.android.domain.colony.PopulationSupportService
@@ -30,6 +31,10 @@ class AppComposition(application: Application) {
     val playerFleetService = PlayerFleetService()
     val headquartersService = HeadquartersService(playerFleetService)
     val colonyNetworkService = ColonyNetworkService(
+        fleetService = playerFleetService,
+        headquartersService = headquartersService,
+    )
+    val colonyEstablishmentService = ColonyEstablishmentService(
         fleetService = playerFleetService,
         headquartersService = headquartersService,
     )

@@ -3,17 +3,27 @@ package com.mineit.android.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mineit.android.domain.events.CorporateEventType
+import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.ui.commercial.CommercialPanelScreen
 import com.mineit.android.ui.commercial.ContractCommercialPanelScreen
 import com.mineit.android.ui.commercial.CorporateEventDialog
 import com.mineit.android.ui.commercial.TradeCommercialPanelScreen
+import com.mineit.android.ui.design.MineItSecondaryButton
+import com.mineit.android.ui.game.ColonyEstablishmentDialog
 import com.mineit.android.ui.theme.MineItTheme
 
 @Composable
@@ -26,12 +36,24 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val network by viewModel.network.collectAsStateWithLifecycle()
     val spaceport by viewModel.spaceport.collectAsStateWithLifecycle()
     val simulationSpeed by viewModel.simulationSpeed.collectAsStateWithLifecycle()
+    val establishmentPrompt by viewModel.establishmentPrompt.collectAsStateWithLifecycle()
     val selectedCoordinates by viewModel.selectedSectors.collectAsStateWithLifecycle()
     val mapFocus by viewModel.mapFocus.collectAsStateWithLifecycle()
     val mapFilters by viewModel.mapFilters.collectAsStateWithLifecycle()
     val statusMessage by viewModel.statusMessage.collectAsStateWithLifecycle()
     val commercialPanel by viewModel.commercialPanel.collectAsStateWithLifecycle()
     val corporateEvent by viewModel.currentCorporateEvent.collectAsStateWithLifecycle()
+    var showEstablishment by remember { mutableStateOf(false) }
+    val establishment = viewModel.establishmentAssessment()
+
+    LaunchedEffect(establishmentPrompt) {
+        if (establishmentPrompt > 0L) showEstablishment = true
+    }
+    LaunchedEffect(state.activeColony.id, state.activeColony.status, establishment.acknowledged) {
+        if (state.activeColony.status != ColonyStatus.SITE_SELECTION && establishment.required && !establishment.acknowledged) {
+            showEstablishment = true
+        }
+    }
 
     MineItTheme {
         if (screen == GameScreen.MAIN_MENU) {
@@ -89,6 +111,15 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onOpenCommercial = { viewModel.openCommercialPanel(CommercialPanel.TRADE) },
                     onMainMenu = viewModel::returnToMainMenu,
                 )
+
+                if (establishment.required && state.activeColony.status != ColonyStatus.SITE_SELECTION && !showEstablishment) {
+                    MineItSecondaryButton(
+                        text = "HANDOVER • ${establishment.phase.name}",
+                        onClick = { showEstablishment = true },
+                        selected = !establishment.acknowledged,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 62.dp),
+                    )
+                }
 
                 commercialPanel?.let { panel ->
                     when (panel) {
@@ -166,6 +197,22 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                             if (event.type == CorporateEventType.SHIP) viewModel.openCommercialPanel(CommercialPanel.TRADE)
                         },
                         onSecondary = viewModel::resolveCurrentEventSecondary,
+                    )
+                }
+
+                if (showEstablishment && establishment.required && state.activeColony.status != ColonyStatus.SITE_SELECTION) {
+                    ColonyEstablishmentDialog(
+                        colonyName = state.activeColony.name,
+                        assessment = establishment,
+                        statusMessage = statusMessage,
+                        transferPreview = viewModel::establishmentResidentTransferPreview,
+                        onUnloadCategory = viewModel::unloadFoundingCategory,
+                        onMoveResidentsAshore = viewModel::moveFoundingResidentsAshore,
+                        onBeginOperations = {
+                            viewModel.beginEstablishmentOperations()
+                            showEstablishment = false
+                        },
+                        onDismiss = { showEstablishment = false },
                     )
                 }
             }

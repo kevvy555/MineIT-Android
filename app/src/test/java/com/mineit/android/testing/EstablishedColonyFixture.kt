@@ -9,6 +9,9 @@ import com.mineit.android.domain.ships.PlayerFleetService
  * Test-only fixture for domain tests whose subject is an already-established planetary colony.
  * N05 new-game parity is covered separately; this helper explicitly completes the initial
  * ship-to-colony stock/resident handover without completing Headquarters command handover.
+ *
+ * Resident placement is constructed directly because this is a historical established-colony
+ * fixture, not a test of the live N05 Housing/Power/Spaceport transfer gates.
  */
 object EstablishedColonyFixture {
     fun contract01(
@@ -34,11 +37,11 @@ object EstablishedColonyFixture {
             check(result.ok) { result.message }
             state = result.state
         }
-        val residents = state.activeColony.shipResidentAssignments.single().residents
-        val moved = fleet.moveResidentsAshore(state, ship.id, residents)
-        check(moved.ok) { moved.message }
-        state = moved.state
-        val colony = state.activeColony.copy(establishmentAcknowledged = true)
+        val colony = state.activeColony.copy(
+            shipResidentAssignments = emptyList(),
+            planetaryAccommodationResidents = state.activeColony.population,
+            establishmentAcknowledged = true,
+        )
         return state.copy(colonies = state.colonies.map { if (it.id == colony.id) colony else it })
     }
 }

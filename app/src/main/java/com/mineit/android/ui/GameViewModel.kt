@@ -10,6 +10,7 @@ import com.mineit.android.app.persistence.PersistenceSaveResult
 import com.mineit.android.domain.buyers.BuyerCollectionProjection
 import com.mineit.android.domain.buyers.BuyerContract
 import com.mineit.android.domain.buyers.BuyerOffer
+import com.mineit.android.domain.colony.ColonyEstablishmentAssessment
 import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.colony.DevelopmentActionResult
 import com.mineit.android.domain.colony.DevelopmentPreview
@@ -23,6 +24,7 @@ import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.ResourceCategory
+import com.mineit.android.domain.ships.FleetActionResult
 import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.trade.ColonistTransferProjection
 import com.mineit.android.domain.trade.TradeQuote
@@ -49,6 +51,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val commercialDayService = composition.commercialDayService
     private val developmentService = composition.colonyDevelopmentService
     private val networkService = composition.colonyNetworkService
+    private val establishmentService = composition.colonyEstablishmentService
     private val headquartersService = composition.headquartersService
     private val populationSupportService = composition.populationSupportService
     private val spaceportService = composition.spaceportService
@@ -71,6 +74,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val network: StateFlow<ColonyNetworkSnapshot> = _network.asStateFlow()
     private val _spaceport = MutableStateFlow(spaceportService.status(state.value, _network.value))
     val spaceport: StateFlow<SpaceportStatus> = _spaceport.asStateFlow()
+    private val _establishmentPrompt = MutableStateFlow(0L)
+    val establishmentPrompt: StateFlow<Long> = _establishmentPrompt.asStateFlow()
 
     private val _selectedSector = MutableStateFlow<SectorCoordinate?>(null)
     val selectedSector: StateFlow<SectorCoordinate?> = _selectedSector.asStateFlow()
@@ -137,6 +142,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_entryReady.value || !_canContinue.value || state.value.company.gameOver) return
         simulationClock.setSpeed(0); resetMapUi(); refreshDerived(state.value)
         _screen.value = GameScreen.GAME; _statusMessage.value = null
+        establishmentAssessment().takeIf { it.required && !it.acknowledged && state.value.activeColony.world.settled }?.let { _establishmentPrompt.value++ }
     }
 
     fun returnToMainMenu() {
@@ -157,7 +163,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val result = session.commit("select-landing-site") { current -> newGameFactory.settleLandingSite(current, index) }
             clearSelection(); refreshDerived(result.state)
-            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) "Landing Site ${index + 1} selected. Simulation remains paused until you start it." else "Landing site selected, but the native save could not be written."
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) "Landing Site ${index + 1} selected. Establish founding-ship operations before starting time." else "Landing site selected, but the native save could not be written."
+            if (establishmentAssessment().let { it.required && !it.acknowledged }) _establishmentPrompt.value++
         }
     }
 
@@ -224,9 +231,73 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun establishmentAssessment(): ColonyEstablishmentAssessment = establishmentService.assessment(
+        state = state.value,
+        network = _network.value,
+        foodProduction = _metrics.value.foodProduction,
+        fuelProduction = _metrics.value.fuelProduction,
+    )
+
+    fun establishmentResidentTransferPreview(amount: Double): FleetActionResult = establishmentService.residentTransferPreview(
+        state = state.value,
+        network = _network.value,
+        requested = amount,
+        spaceportServicesAvailable = _spaceport.value.transfersAllowed,
+    )
+
+    fun unloadFoundingCategory(category: ResourceCategory) {
+        viewModelScope.launch {
+            var applied: FleetActionResult? = null
+            val result = session.commit("founding-unload-${category.name.lowercase()}") { current ->
+                val network = networkService.calculate(current)
+                val services = spaceportService.status(current, network)
+                establishmentService.unloadCategory(current, category, services.transfersAllowed).also { applied = it }.state
+            }
+            refreshDerived(result.state)
+            val action = requireNotNull(applied)
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Failure && action.ok) "${action.message} Save write failed." else action.message
+        }
+    }
+
+    fun moveFoundingResidentsAshore(amount: Double, confirmed: Boolean) {
+        viewModelScope.launch {
+            var applied: FleetActionResult? = null
+            val result = session.commit("founding-residents-ashore") { current ->
+                val network = networkService.calculate(current)
+                val services = spaceportService.status(current, network)
+                establishmentService.residentTransferPreview(current, network, amount, services.transfersAllowed, confirmed).also { applied = it }.state
+            }
+            refreshDerived(result.state)
+            val action = requireNotNull(applied)
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Failure && action.ok) "${action.message} Save write failed." else action.message
+        }
+    }
+
+    fun beginEstablishmentOperations() {
+        viewModelScope.launch {
+            var message = ""
+            var ok = false
+            val result = session.commit("begin-colony-operations") { current ->
+                establishmentService.acknowledge(current).also { action -> message = action.message; ok = action.ok }.state
+            }
+            refreshDerived(result.state)
+            if (ok) simulationClock.setSpeed(1)
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Failure && ok) "$message Save write failed." else message
+        }
+    }
+
     fun departureGate(): HeadquartersDepartureGate = headquartersService.departureGate(state.value)
     fun advanceDay() { viewModelScope.launch { advanceSimulationDay(fromClock = false) } }
     fun setSimulationSpeed(speed: Int) {
+        if (speed > 0) {
+            val establishment = establishmentAssessment()
+            if (establishment.required && !establishment.acknowledged) {
+                simulationClock.setSpeed(0)
+                _statusMessage.value = "Establish founding-ship operations before starting time."
+                _establishmentPrompt.value++
+                return
+            }
+        }
         if (_currentCorporateEvent.value != null && speed > 0) { _statusMessage.value = "Resolve the corporate event before resuming simulation."; return }
         simulationClock.setSpeed(speed); _statusMessage.value = if (speed == 0) "Simulation paused." else "Simulation running at ${speed}×."
     }
@@ -393,6 +464,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun advanceSimulationDay(fromClock: Boolean) {
         if (!state.value.activeColony.world.settled || _currentCorporateEvent.value != null) return
+        val establishment = establishmentAssessment()
+        if (establishment.required && !establishment.acknowledged) {
+            simulationClock.setSpeed(0)
+            _statusMessage.value = "Establish founding-ship operations before advancing time."
+            _establishmentPrompt.value++
+            return
+        }
         var dayResult: com.mineit.android.domain.commercial.CommercialDayResult? = null
         val commit = session.commit(if (fromClock) "clock-day" else "advance-day") { current ->
             val currentNetwork = networkService.calculate(current)
