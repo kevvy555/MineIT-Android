@@ -41,6 +41,7 @@ import com.mineit.android.domain.colony.HeadquartersDepartureGate
 import com.mineit.android.domain.colony.InfrastructureRules
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.resources.ResourceCategory
+import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.WorldTile
 import com.mineit.android.ui.art.MineItAssetPaths
 import com.mineit.android.ui.art.rememberMineItAssetBitmap
@@ -52,7 +53,6 @@ import com.mineit.android.ui.design.MineItRadius
 import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.design.MineItSectionHeader
 import com.mineit.android.ui.design.MineItSpacing
-import com.mineit.android.ui.design.MineItStat
 import com.mineit.android.ui.design.MineItStatusBadge
 import kotlin.math.max
 
@@ -87,13 +87,7 @@ fun HeadquartersControlSheet(
         ) {
             HeadquartersHero(tile, model)
 
-            model.alert?.let { alert ->
-                HeadquartersNotice(
-                    title = alert.title,
-                    text = alert.text,
-                    tone = alert.tone,
-                )
-            }
+            model.alert?.let { HeadquartersNotice(it.title, it.text, it.tone) }
             statusMessage?.takeIf { it.isNotBlank() }?.let {
                 Text(it, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
             }
@@ -128,19 +122,14 @@ fun HeadquartersControlSheet(
 
             MineItSectionHeader("UPGRADE TO NEXT LEVEL")
             if (model.maxLevel) {
-                HeadquartersNotice(
-                    title = "MAX LEVEL",
-                    text = "Headquarters has reached L5.",
-                    tone = ColonyDetailTone.GOOD,
-                )
+                HeadquartersNotice("MAX LEVEL", "Headquarters has reached L5.", ColonyDetailTone.GOOD)
             } else {
                 HeadquartersMetricGrid(
                     listOf(
                         HeadquartersMetric("NEXT LEVEL", "HEADQUARTERS L${model.nextLevel}"),
-                        HeadquartersMetric("IMPROVEMENT", "+${formatNumber(model.capacityGain)} COMMAND"),
+                        HeadquartersMetric("IMPROVEMENT", "+${hqFormatNumber(model.capacityGain)} COMMAND"),
                     ),
                 )
-
                 MineItSectionHeader("REQUIREMENTS")
                 HeadquartersMetricGrid(model.requirements)
                 HeadquartersNotice(
@@ -150,10 +139,7 @@ fun HeadquartersControlSheet(
                 )
             }
 
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
                 if (!model.primary) {
                     MineItSecondaryButton(
                         text = if (model.primaryEligible) "SET PRIMARY" else "PRIMARY BLOCKED",
@@ -173,6 +159,7 @@ fun HeadquartersControlSheet(
                     modifier = Modifier.weight(1f),
                 )
             }
+
             MineItDestructiveButton(
                 text = "DEMOLISH HEADQUARTERS",
                 onClick = { confirmDemolition = true },
@@ -189,14 +176,10 @@ fun HeadquartersControlSheet(
             title = { Text(if (model.primary) "DEMOLISH PRIMARY HEADQUARTERS?" else "DEMOLISH HEADQUARTERS?") },
             text = {
                 Text(
-                    if (model.primary) {
-                        if (model.commandShipFallback) {
-                            "This removes the selected Primary Headquarters. The docked command-capable ship can take emergency command, but the conglomerate network will be offline until a staffed Primary Headquarters is restored. Normal demolition recovery applies."
-                        } else {
-                            "This removes the selected Primary Headquarters. No docked command-capable ship is available, so command capacity will fall to zero and the conglomerate network will be offline until a staffed Primary Headquarters is restored. Normal demolition recovery applies."
-                        }
-                    } else {
-                        "This expansion Headquarters will stop contributing command capacity and bonus immediately. Normal demolition recovery applies."
+                    when {
+                        !model.primary -> "This expansion Headquarters will stop contributing command capacity and bonus immediately. Normal demolition recovery applies."
+                        model.commandShipFallback -> "This removes the selected Primary Headquarters. The docked command-capable ship can take emergency command, but the conglomerate network will be offline until a staffed Primary Headquarters is restored. Normal demolition recovery applies."
+                        else -> "This removes the selected Primary Headquarters. No docked command-capable ship is available, so command capacity will fall to zero and the conglomerate network will be offline until a staffed Primary Headquarters is restored. Normal demolition recovery applies."
                     },
                 )
             },
@@ -227,7 +210,7 @@ private fun HeadquartersHero(tile: WorldTile, model: HeadquartersControlModel) {
                 Text("COLONY CONTROL • HEADQUARTERS", style = MaterialTheme.typography.labelSmall, color = MineItPalette.Accent, fontWeight = FontWeight.Bold)
                 Text("Headquarters L${model.level}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
                 Row(horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                    MineItStatusBadge(model.status, toneColor(model.statusTone))
+                    MineItStatusBadge(model.status, hqToneColor(model.statusTone))
                     MineItStatusBadge(if (model.primary) "PRIMARY" else "EXPANSION", MineItPalette.Accent)
                 }
                 Text("Sector ${tile.coordinate.x},${tile.coordinate.y}", style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
@@ -277,7 +260,7 @@ private fun HeadquartersMetricGrid(metrics: List<HeadquartersMetric>) {
                     ) {
                         Column(Modifier.padding(MineItSpacing.Sm), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
-                            Text(metric.value, style = MaterialTheme.typography.titleSmall, color = toneColor(metric.tone), fontWeight = FontWeight.Black)
+                            Text(metric.value, style = MaterialTheme.typography.titleSmall, color = hqToneColor(metric.tone), fontWeight = FontWeight.Black)
                             metric.detail?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted) }
                         }
                     }
@@ -290,7 +273,7 @@ private fun HeadquartersMetricGrid(metrics: List<HeadquartersMetric>) {
 
 @Composable
 private fun HeadquartersNotice(title: String, text: String, tone: ColonyDetailTone) {
-    val color = toneColor(tone)
+    val color = hqToneColor(tone)
     Surface(
         color = color.copy(alpha = .08f),
         border = BorderStroke(1.dp, color.copy(alpha = .45f)),
@@ -301,13 +284,6 @@ private fun HeadquartersNotice(title: String, text: String, tone: ColonyDetailTo
             Text(text, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
         }
     }
-}
-
-private fun toneColor(tone: ColonyDetailTone): Color = when (tone) {
-    ColonyDetailTone.NORMAL -> MineItPalette.Text
-    ColonyDetailTone.GOOD -> MineItPalette.Success
-    ColonyDetailTone.WARNING -> MineItPalette.Warning
-    ColonyDetailTone.CRITICAL -> MineItPalette.Critical
 }
 
 data class HeadquartersMetric(
@@ -344,7 +320,7 @@ data class HeadquartersControlModel(
     val commandShipFallback: Boolean,
 )
 
-/** Pure HQ-context presentation mapping of the maintained web Colony Control/adaptive-building hierarchy. */
+/** Pure HQ-context presentation mapping of the maintained web Colony Control hierarchy. */
 object HeadquartersControlPresentation {
     fun build(
         state: GameState,
@@ -354,12 +330,12 @@ object HeadquartersControlPresentation {
         upgradePreview: DevelopmentPreview?,
     ): HeadquartersControlModel {
         val development = requireNotNull(tile.development) { "Headquarters Control requires a developed tile." }
-        require(development.kind == com.mineit.android.domain.world.DevelopmentKind.HEADQUARTERS) { "Headquarters Control requires a Headquarters tile." }
-        val row = requireNotNull(network.headquarters.rows.firstOrNull { it.coordinate == tile.coordinate }) { "Headquarters network row not found." }
+        require(development.kind == DevelopmentKind.HEADQUARTERS) { "Headquarters Control requires a Headquarters tile." }
+        val row = requireNotNull(network.headquarters.rows.firstOrNull { it.coordinate == tile.coordinate }) {
+            "Headquarters network row not found."
+        }
         val primary = row.primary
         val continuity = network.continuity
-        val powerDelivered = if (row.powered) row.requiredPower else 0.0
-        val assignedStaff = if (row.staffed) row.requiredStaff else 0.0
         val status = when {
             primary && continuity.phase == HeadquartersContinuityPhase.OUTAGE -> "HQ OUTAGE"
             primary && continuity.phase == HeadquartersContinuityPhase.RECOVERY -> "RECOVERING"
@@ -375,16 +351,16 @@ object HeadquartersControlPresentation {
         }
 
         val overview = listOf(
-            HeadquartersMetric("COMMAND CAPACITY", formatNumber(row.capacity)),
+            HeadquartersMetric("COMMAND CAPACITY", hqFormatNumber(row.capacity)),
             HeadquartersMetric(
                 "STAFF",
-                "${formatNumber(assignedStaff)} / ${formatNumber(row.requiredStaff)}",
+                "${hqFormatNumber(if (row.staffed) row.requiredStaff else 0.0)} / ${hqFormatNumber(row.requiredStaff)}",
                 if (row.staffed) "Fully staffed" else "Not operational",
                 if (row.staffed) ColonyDetailTone.GOOD else ColonyDetailTone.CRITICAL,
             ),
             HeadquartersMetric(
                 "POWER",
-                "${formatNumber(powerDelivered)} / ${formatNumber(row.requiredPower)}",
+                "${hqFormatNumber(if (row.powered) row.requiredPower else 0.0)} / ${hqFormatNumber(row.requiredPower)}",
                 if (row.powered) "Operational" else "No command contribution",
                 if (row.powered) ColonyDetailTone.GOOD else ColonyDetailTone.CRITICAL,
             ),
@@ -406,47 +382,49 @@ object HeadquartersControlPresentation {
             HeadquartersMetric(
                 "CONGLOMERATE LINK",
                 if (continuity.networkAvailable) "ONLINE" else "OFFLINE",
-                when (continuity.phase) {
-                    HeadquartersContinuityPhase.RECOVERY -> "${continuity.recoveryDaysRemaining} recovery days remain"
-                    else -> continuity.reason
-                },
+                if (continuity.phase == HeadquartersContinuityPhase.RECOVERY) "${continuity.recoveryDaysRemaining} recovery days remain" else continuity.reason,
                 if (continuity.networkAvailable) ColonyDetailTone.GOOD else ColonyDetailTone.CRITICAL,
             ),
-            HeadquartersMetric("TOTAL CAPACITY", formatNumber(network.headquarters.capacity)),
-            HeadquartersMetric("COMMAND LOAD", formatNumber(network.headquarters.load), if (network.headquarters.load > network.headquarters.capacity) "Capacity exceeded" else "Within capacity", if (network.headquarters.load > network.headquarters.capacity) ColonyDetailTone.WARNING else ColonyDetailTone.GOOD),
+            HeadquartersMetric("TOTAL CAPACITY", hqFormatNumber(network.headquarters.capacity)),
+            HeadquartersMetric(
+                "COMMAND LOAD",
+                hqFormatNumber(network.headquarters.load),
+                if (network.headquarters.load > network.headquarters.capacity) "Capacity exceeded" else "Within capacity",
+                if (network.headquarters.load > network.headquarters.capacity) ColonyDetailTone.WARNING else ColonyDetailTone.GOOD,
+            ),
             HeadquartersMetric(
                 "COMMAND EFFICIENCY",
-                percent(network.headquarters.efficiency),
-                "${percent(network.headquarters.bonus)} bonus • ${percent(network.headquarters.overloadPenalty)} penalty",
-                factorTone(network.headquarters.efficiency),
+                hqPercent(network.headquarters.efficiency),
+                "${hqPercent(network.headquarters.bonus)} bonus • ${hqPercent(network.headquarters.overloadPenalty)} penalty",
+                hqFactorTone(network.headquarters.efficiency),
             ),
             HeadquartersMetric(
                 "OUTAGE CONTINUITY",
-                percent(continuity.efficiencyFactor),
+                hqPercent(continuity.efficiencyFactor),
                 when (continuity.phase) {
                     HeadquartersContinuityPhase.OUTAGE -> "${continuity.offlineDays} full offline days"
                     HeadquartersContinuityPhase.RECOVERY -> "${continuity.recoveryDaysRemaining} days to full recovery"
                     HeadquartersContinuityPhase.ONLINE -> "No continuity penalty"
                 },
-                factorTone(continuity.efficiencyFactor),
+                hqFactorTone(continuity.efficiencyFactor),
             ),
             HeadquartersMetric(
                 "EFFECTIVE OUTPUT",
-                percent(continuity.effectiveCommandEfficiency),
+                hqPercent(continuity.effectiveCommandEfficiency),
                 "Command × outage continuity",
-                factorTone(continuity.effectiveCommandEfficiency),
+                hqFactorTone(continuity.effectiveCommandEfficiency),
             ),
         )
 
         val alert = when (continuity.phase) {
             HeadquartersContinuityPhase.OUTAGE -> HeadquartersControlAlert(
                 "CONGLOMERATE NETWORK OFFLINE",
-                "New conglomerate orders are blocked. Existing commitments continue. Colony work is operating at ${percent(continuity.efficiencyFactor)}; continuity degrades while the Primary Headquarters remains offline.",
+                "New conglomerate orders are blocked. Existing commitments continue. Colony work is operating at ${hqPercent(continuity.efficiencyFactor)}; continuity degrades while the Primary Headquarters remains offline.",
                 ColonyDetailTone.CRITICAL,
             )
             HeadquartersContinuityPhase.RECOVERY -> HeadquartersControlAlert(
                 "HEADQUARTERS RECOVERY",
-                "Conglomerate access is restored. Colony work is operating at ${percent(continuity.efficiencyFactor)} and will recover over ${continuity.recoveryDaysRemaining} more day${if (continuity.recoveryDaysRemaining == 1) "" else "s"}.",
+                "Conglomerate access is restored. Colony work is operating at ${hqPercent(continuity.efficiencyFactor)} and will recover over ${continuity.recoveryDaysRemaining} more day${if (continuity.recoveryDaysRemaining == 1) "" else "s"}.",
                 ColonyDetailTone.WARNING,
             )
             HeadquartersContinuityPhase.ONLINE -> null
@@ -463,42 +441,37 @@ object HeadquartersControlPresentation {
             departureGate.ok -> "Primary Headquarters is constructed and fully staffed; first ship departure may complete command handover."
             else -> departureGate.failures.joinToString(" • ")
         }
-        val handoverTone = if (handoverComplete || departureGate.ok) ColonyDetailTone.GOOD else ColonyDetailTone.WARNING
 
         val maxLevel = development.level >= InfrastructureRules.MAX_LEVEL || upgradePreview?.max == true
         val nextLevel = if (maxLevel) development.level else upgradePreview?.nextLevel?.takeIf { it > development.level } ?: development.level + 1
-        val nextCapacity = InfrastructureRules.headquartersCapacity(nextLevel)
-        val capacityGain = max(0.0, nextCapacity - row.capacity)
+        val capacityGain = max(0.0, InfrastructureRules.headquartersCapacity(nextLevel) - row.capacity)
         val upgradeReady = !maxLevel && upgradePreview?.ok == true
         val upgradeReason = upgradePreview?.reason ?: if (maxLevel) "Maximum Headquarters level reached." else "Upgrade requirements are not satisfied."
-        val cost = upgradePreview?.cost
         val buildStock = state.activeColony.inventory.amountFor(ResourceCategory.BUILD)
         val oreStock = state.activeColony.inventory.amountFor(ResourceCategory.ORE)
         val requirements = if (maxLevel) emptyList() else buildList {
-            val buildRequired = cost?.build ?: 0.0
+            val buildRequired = upgradePreview?.cost?.build ?: 0.0
             add(
                 HeadquartersMetric(
                     "BUILD",
-                    formatNumber(buildRequired),
-                    "${formatNumber(buildStock)} available",
+                    hqFormatNumber(buildRequired),
+                    "${hqFormatNumber(buildStock)} available",
                     if (buildStock + .0001 >= buildRequired) ColonyDetailTone.GOOD else ColonyDetailTone.WARNING,
                 ),
             )
-            val oreRequired = cost?.ore ?: 0.0
+            val oreRequired = upgradePreview?.cost?.ore ?: 0.0
             if (oreRequired > .0001) {
                 add(
                     HeadquartersMetric(
                         "ORE",
-                        formatNumber(oreRequired),
-                        "${formatNumber(oreStock)} available",
+                        hqFormatNumber(oreRequired),
+                        "${hqFormatNumber(oreStock)} available",
                         if (oreStock + .0001 >= oreRequired) ColonyDetailTone.GOOD else ColonyDetailTone.WARNING,
                     ),
                 )
             }
         }
-        val commandShipFallback = state.fleet.ships.any { ship ->
-            ship.dockedColonyId == state.activeColonyId && ship.commandCapable
-        }
+        val commandShipFallback = state.fleet.ships.any { it.dockedColonyId == state.activeColonyId && it.commandCapable }
 
         return HeadquartersControlModel(
             level = development.level,
@@ -511,7 +484,7 @@ object HeadquartersControlPresentation {
             alert = alert,
             handoverStatus = handoverStatus,
             handoverDetail = handoverDetail,
-            handoverTone = handoverTone,
+            handoverTone = if (handoverComplete || departureGate.ok) ColonyDetailTone.GOOD else ColonyDetailTone.WARNING,
             nextLevel = nextLevel,
             capacityGain = capacityGain,
             maxLevel = maxLevel,
@@ -521,13 +494,20 @@ object HeadquartersControlPresentation {
             commandShipFallback = commandShipFallback,
         )
     }
-
-    private fun factorTone(value: Double): ColonyDetailTone = when {
-        value >= .999 -> ColonyDetailTone.GOOD
-        value >= .7 -> ColonyDetailTone.WARNING
-        else -> ColonyDetailTone.CRITICAL
-    }
 }
 
-private fun percent(value: Double): String = "${(value.coerceAtLeast(0.0) * 100.0).toInt()}%"
-private fun formatNumber(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else "%.1f".format(value)
+private fun hqFactorTone(value: Double): ColonyDetailTone = when {
+    value >= .999 -> ColonyDetailTone.GOOD
+    value >= .7 -> ColonyDetailTone.WARNING
+    else -> ColonyDetailTone.CRITICAL
+}
+
+private fun hqToneColor(tone: ColonyDetailTone): Color = when (tone) {
+    ColonyDetailTone.NORMAL -> MineItPalette.Text
+    ColonyDetailTone.GOOD -> MineItPalette.Success
+    ColonyDetailTone.WARNING -> MineItPalette.Warning
+    ColonyDetailTone.CRITICAL -> MineItPalette.Critical
+}
+
+private fun hqPercent(value: Double): String = "${(value.coerceAtLeast(0.0) * 100.0).toInt()}%"
+private fun hqFormatNumber(value: Double): String = if (value % 1.0 == 0.0) value.toLong().toString() else "%.1f".format(value)
