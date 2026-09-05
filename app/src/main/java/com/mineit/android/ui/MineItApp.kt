@@ -20,6 +20,7 @@ import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.technology.ScanningTechnology
 import com.mineit.android.domain.world.DevelopmentKind
+import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.ui.commercial.CommercialPanelScreen
 import com.mineit.android.ui.commercial.ContractCommercialPanelScreen
 import com.mineit.android.ui.commercial.CorporateEventDialog
@@ -27,6 +28,7 @@ import com.mineit.android.ui.commercial.TradeCommercialPanelScreen
 import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.game.ColonyEstablishmentDialog
 import com.mineit.android.ui.game.CriticalResourceWarningDialog
+import com.mineit.android.ui.game.DevelopmentDetailDialog
 import com.mineit.android.ui.map.MapFocus
 import com.mineit.android.ui.theme.MineItTheme
 
@@ -50,19 +52,26 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val commercialPanel by viewModel.commercialPanel.collectAsStateWithLifecycle()
     val corporateEvent by viewModel.currentCorporateEvent.collectAsStateWithLifecycle()
     var showEstablishment by remember { mutableStateOf(false) }
+    var developmentDetailCoordinate by remember { mutableStateOf<SectorCoordinate?>(null) }
     val establishment = viewModel.establishmentAssessment()
     val scanning = ScanningTechnology.forLevel(state.activeColony.technology.scanning)
     val surveyableCoordinates = state.activeColony.world.tiles
         .map { it.coordinate }
         .filterTo(linkedSetOf()) { viewModel.surveyDays(it) != null }
+    val developmentDetailTile = developmentDetailCoordinate?.let(state.activeColony.world::tileAt)
+    val developmentDetail = developmentDetailCoordinate?.let(viewModel::developmentDetail)
 
     LaunchedEffect(establishmentPrompt) {
         if (establishmentPrompt > 0L) showEstablishment = true
     }
     LaunchedEffect(state.activeColony.id, state.activeColony.status, establishment.acknowledged) {
+        developmentDetailCoordinate = null
         if (state.activeColony.status != ColonyStatus.SITE_SELECTION && establishment.required && !establishment.acknowledged) {
             showEstablishment = true
         }
+    }
+    LaunchedEffect(developmentDetailCoordinate, developmentDetail) {
+        if (developmentDetailCoordinate != null && developmentDetail == null) developmentDetailCoordinate = null
     }
 
     MineItTheme {
@@ -108,13 +117,19 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onSelectLandingSite = viewModel::selectLandingSite,
                     onSelectSector = { coordinate ->
                         if (coordinate in surveyableCoordinates) {
+                            developmentDetailCoordinate = null
                             viewModel.selectSector(coordinate)
                             viewModel.surveySelectedSector()
                         } else {
                             viewModel.selectSector(coordinate)
+                            val kind = state.activeColony.world.tileAt(coordinate)?.development?.kind
+                            developmentDetailCoordinate = if (kind != null && kind != DevelopmentKind.HEADQUARTERS) coordinate else null
                         }
                     },
-                    onBeginMultiSelect = viewModel::beginMultiSelect,
+                    onBeginMultiSelect = { coordinate ->
+                        developmentDetailCoordinate = null
+                        viewModel.beginMultiSelect(coordinate)
+                    },
                     onAddMultiSelect = viewModel::addMultiSelect,
                     onEndMultiSelect = {
                         viewModel.surveySelectedSectors()
@@ -125,7 +140,10 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                         viewModel.surveySelectedSectors()
                         viewModel.clearSelection()
                     },
-                    onClearSelection = viewModel::clearSelection,
+                    onClearSelection = {
+                        developmentDetailCoordinate = null
+                        viewModel.clearSelection()
+                    },
                     onSetMapFocus = viewModel::setMapFocus,
                     onToggleMapFilter = viewModel::toggleMapFilter,
                     onClearMapFilters = viewModel::clearMapFilters,
@@ -138,6 +156,7 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onSetSimulationSpeed = viewModel::setSimulationSpeed,
                     onOpenCommercial = { viewModel.openCommercialPanel(CommercialPanel.TRADE) },
                     onOpenAttention = {
+                        developmentDetailCoordinate = null
                         when (attention.target) {
                             ColonyAttentionTarget.LANDING_SITE -> Unit
                             ColonyAttentionTarget.CORPORATE_SHIP -> viewModel.openCommercialPanel(CommercialPanel.TRADE)
@@ -156,10 +175,27 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onMainMenu = viewModel::returnToMainMenu,
                 )
 
+                if (developmentDetail != null && developmentDetailTile != null) {
+                    DevelopmentDetailDialog(
+                        tile = developmentDetailTile,
+                        detail = developmentDetail,
+                        statusMessage = statusMessage,
+                        onUpgrade = viewModel::upgradeSelected,
+                        onDemolish = {
+                            viewModel.demolishSelected()
+                            developmentDetailCoordinate = null
+                        },
+                        onDismiss = { developmentDetailCoordinate = null },
+                    )
+                }
+
                 if (establishment.required && state.activeColony.status != ColonyStatus.SITE_SELECTION && !showEstablishment) {
                     MineItSecondaryButton(
                         text = "HANDOVER • ${establishment.phase.name}",
-                        onClick = { showEstablishment = true },
+                        onClick = {
+                            developmentDetailCoordinate = null
+                            showEstablishment = true
+                        },
                         selected = !establishment.acknowledged,
                         modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 62.dp),
                     )

@@ -4,6 +4,7 @@ import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.colony.HeadquartersContinuityPhase
 import com.mineit.android.domain.colony.HeadquartersService
+import com.mineit.android.domain.colony.SiteProductionRules
 import com.mineit.android.domain.colony.TechnologyCapabilities
 import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
@@ -21,7 +22,6 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 
 /** Canonical pure-Kotlin owner for one complete MineIT colony day. */
 class DailySimulationEngine(
@@ -406,20 +406,8 @@ class DailySimulationEngine(
         return Production(food, build, fuel, ore)
     }
 
-    private fun collectionRate(colony: ColonyState, tile: WorldTile, network: ColonyNetworkSnapshot): Double {
-        val deposit = requireNotNull(tile.deposit)
-        val level = tile.development?.level ?: 1
-        val potential = if (deposit.sustainability == Sustainability.RENEWABLE) {
-            siteOutput(level) * renewableRateFactor(deposit.abundanceLabel) * deposit.terrainYieldFactor * deposit.harvestIntensity.coerceIn(.25, 2.0)
-        } else {
-            siteOutput(level) * finiteRateFactor(deposit.depositScale) * deposit.terrainYieldFactor
-        }
-        val adjusted = if (deposit.category == ResourceCategory.FOOD) potential * TechnologyCapabilities.foodProductionMultiplier(colony.technology) else potential
-        val workforce = if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) network.workforceSurvivalFactor else network.workforceCommercialFactor
-        val industry = if (deposit.category in setOf(ResourceCategory.FOOD, ResourceCategory.FUEL)) network.industrySurvivalFactor else network.industryCommercialFactor
-        val power = network.sitePowerFactors[siteId(tile)] ?: 1.0
-        return max(0.0, adjusted * workforce * industry * power * network.continuity.effectiveCommandEfficiency)
-    }
+    private fun collectionRate(colony: ColonyState, tile: WorldTile, network: ColonyNetworkSnapshot): Double =
+        SiteProductionRules.rate(colony, tile, network)
 
     private fun updateRenewable(tile: WorldTile): RenewableUpdate {
         val deposit = requireNotNull(tile.deposit)
@@ -470,12 +458,6 @@ class DailySimulationEngine(
         return if (colony.contract?.naturalFood == false) base else base * .35
     }
 
-    private fun siteOutput(level: Int): Double {
-        val normalized = max(1, level)
-        if (normalized <= MineItConfig.SITE_OUTPUT_LEVELS.size) return MineItConfig.SITE_OUTPUT_LEVELS[normalized - 1]
-        return MineItConfig.SITE_OUTPUT_LEVELS.last() * 1.24.pow(normalized - MineItConfig.SITE_OUTPUT_LEVELS.size)
-    }
-
     private fun availableRatio(stock: Double, production: Double, demand: Double): Double =
         if (demand > 0.0) ((max(0.0, stock) + max(0.0, production)) / demand).coerceIn(0.0, 1.0) else 1.0
 
@@ -494,13 +476,9 @@ class DailySimulationEngine(
         return MineItConfig.CRITICAL_MORTALITY_MAX + t * (MineItConfig.COLLAPSE_MORTALITY_MAX - MineItConfig.CRITICAL_MORTALITY_MAX)
     }
 
-    private fun finiteRateFactor(label: String?): Double = when (label?.lowercase()) {
-        "small" -> .75; "modest" -> .90; "large" -> 1.05; "huge" -> 1.20; "colossal" -> 1.35; else -> 1.0
-    }
     private fun renewableRank(label: String?): Int = when (label?.lowercase()) { "limited" -> 0; "large" -> 2; "vast" -> 3; else -> 1 }
     private fun renewableLabel(rank: Int): String = listOf("Limited", "Established", "Large", "Vast")[rank.coerceIn(0, 3)]
     private fun renewableRateFactor(label: String?): Double = when (label?.lowercase()) { "limited" -> .65; "large" -> 1.45; "vast" -> 2.10; else -> 1.0 }
-    private fun siteId(tile: WorldTile) = "site:${tile.coordinate.x},${tile.coordinate.y}"
     private fun jsRoundToLong(value: Double) = floor(value + .5).toLong()
 
     private fun GameState.withActiveColony(updated: ColonyState): GameState =
