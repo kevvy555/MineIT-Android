@@ -3,8 +3,12 @@ package com.mineit.android.ui.map
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
 import com.mineit.android.domain.world.SectorCoordinate
+import com.mineit.android.domain.world.TerrainType
+import com.mineit.android.domain.world.WorldTile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ColonyMapGestureTest {
@@ -25,5 +29,23 @@ class ColonyMapGestureTest {
         assertNull(coordinateAt(Offset(10f, -1f), size))
         assertNull(coordinateAt(Offset(800f, 10f), size))
         assertNull(coordinateAt(Offset(10f, 800f), size))
+    }
+
+    @Test
+    fun `yellow resurvey opportunity is derived from last scan level not hidden resource truth`() {
+        val coordinate = SectorCoordinate(-2, 1)
+        val clearOldScan = WorldTile(
+            coordinate = coordinate,
+            terrain = TerrainType.PLAIN,
+            terrainVariant = 1,
+            revealed = true,
+            lastScannedAtLevel = 2,
+            deposit = null,
+        )
+
+        assertTrue(isResurveyAvailable(clearOldScan, scanningLevel = 3))
+        assertFalse(isResurveyAvailable(clearOldScan, scanningLevel = 2))
+        assertFalse(isResurveyAvailable(clearOldScan.copy(lastScannedAtLevel = 0), scanningLevel = 3))
+        assertFalse(isResurveyAvailable(clearOldScan.copy(coordinate = SectorCoordinate(0, 0)), scanningLevel = 3))
     }
 }

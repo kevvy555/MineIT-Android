@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mineit.android.app.ColonyAttentionTarget
 import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.model.ColonyStatus
+import com.mineit.android.domain.technology.ScanningTechnology
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.ui.commercial.CommercialPanelScreen
 import com.mineit.android.ui.commercial.ContractCommercialPanelScreen
@@ -50,6 +51,10 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val corporateEvent by viewModel.currentCorporateEvent.collectAsStateWithLifecycle()
     var showEstablishment by remember { mutableStateOf(false) }
     val establishment = viewModel.establishmentAssessment()
+    val scanning = ScanningTechnology.forLevel(state.activeColony.technology.scanning)
+    val surveyableCoordinates = state.activeColony.world.tiles
+        .map { it.coordinate }
+        .filterTo(linkedSetOf()) { viewModel.surveyDays(it) != null }
 
     LaunchedEffect(establishmentPrompt) {
         if (establishmentPrompt > 0L) showEstablishment = true
@@ -87,6 +92,9 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     selectedTiles = selectedTiles,
                     selectedSurveyDays = singleCoordinate?.let(viewModel::surveyDays),
                     surveyableSelectedCount = viewModel.surveyableSelectedCount(),
+                    surveyableCoordinates = surveyableCoordinates,
+                    scanningLevel = scanning.level,
+                    surveySlots = scanning.surveySlots,
                     statusMessage = statusMessage,
                     mapFocus = mapFocus,
                     mapFilters = mapFilters,
@@ -98,11 +106,25 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     upgradePreview = viewModel.upgradePreview(),
                     departureGate = viewModel.departureGate(),
                     onSelectLandingSite = viewModel::selectLandingSite,
-                    onSelectSector = viewModel::selectSector,
+                    onSelectSector = { coordinate ->
+                        if (coordinate in surveyableCoordinates) {
+                            viewModel.selectSector(coordinate)
+                            viewModel.surveySelectedSector()
+                        } else {
+                            viewModel.selectSector(coordinate)
+                        }
+                    },
                     onBeginMultiSelect = viewModel::beginMultiSelect,
                     onAddMultiSelect = viewModel::addMultiSelect,
+                    onEndMultiSelect = {
+                        viewModel.surveySelectedSectors()
+                        viewModel.clearSelection()
+                    },
                     onSurveySelectedSector = viewModel::surveySelectedSector,
-                    onSurveySelectedSectors = viewModel::surveySelectedSectors,
+                    onSurveySelectedSectors = {
+                        viewModel.surveySelectedSectors()
+                        viewModel.clearSelection()
+                    },
                     onClearSelection = viewModel::clearSelection,
                     onSetMapFocus = viewModel::setMapFocus,
                     onToggleMapFilter = viewModel::toggleMapFilter,
@@ -128,7 +150,7 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                             ColonyAttentionTarget.HOUSING -> viewModel.setMapFocus(MapFocus.HOUSING)
                             ColonyAttentionTarget.ORE -> viewModel.setMapFocus(MapFocus.ORE)
                             ColonyAttentionTarget.PROBLEMS -> viewModel.setMapFocus(MapFocus.PROBLEMS)
-                            ColonyAttentionTarget.COLONY -> Unit // handled inside MineItScreen
+                            ColonyAttentionTarget.COLONY -> Unit
                         }
                     },
                     onMainMenu = viewModel::returnToMainMenu,

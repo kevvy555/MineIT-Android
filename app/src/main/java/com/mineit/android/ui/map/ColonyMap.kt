@@ -4,7 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -12,10 +13,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -37,6 +41,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -60,12 +65,16 @@ fun ColonyMap(
     activeSurveys: List<SurveyTask>,
     queued: Set<SectorCoordinate>,
     selected: Set<SectorCoordinate>,
+    surveyable: Set<SectorCoordinate>,
+    scanningLevel: Int,
+    surveySlots: Int,
     focus: MapFocus,
     stateFilters: Set<MapStateFilter>,
     network: ColonyNetworkSnapshot,
     onTap: (SectorCoordinate) -> Unit,
     onBeginMultiSelect: (SectorCoordinate) -> Unit,
     onAddMultiSelect: (SectorCoordinate) -> Unit,
+    onEndMultiSelect: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val haptics = LocalHapticFeedback.current
@@ -80,13 +89,15 @@ fun ColonyMap(
                 .size(gridSize)
                 .align(Alignment.Center)
                 .onSizeChanged { gridPixels = it }
-                .pointerSelect(
+                .pointerSurveySelect(
                     gridPixels = gridPixels,
+                    surveyable = surveyable,
                     onStart = { coordinate ->
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         onBeginMultiSelect(coordinate)
                     },
                     onDrag = onAddMultiSelect,
+                    onEnd = onEndMultiSelect,
                 ),
         ) {
             Column(Modifier.fillMaxSize()) {
@@ -112,6 +123,7 @@ fun ColonyMap(
                                     queued = coordinate in queued,
                                     selected = coordinate in selected,
                                     multiSelected = selected.size > 1 && coordinate in selected,
+                                    resurveyAvailable = isResurveyAvailable(tile, scanningLevel),
                                     problem = MapPresentation.isProblem(tile, network),
                                     dimmed = !matches,
                                     onClick = { onTap(coordinate) },
@@ -122,22 +134,47 @@ fun ColonyMap(
                     }
                 }
             }
+            if (activeSurveys.isNotEmpty() || queued.isNotEmpty()) {
+                SurveyHud(
+                    scanningLevel = scanningLevel,
+                    slots = surveySlots,
+                    active = activeSurveys,
+                    queuedCount = queued.size,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                )
+            }
         }
     }
 }
 
-private fun Modifier.pointerSelect(
+private fun Modifier.pointerSurveySelect(
     gridPixels: IntSize,
+    surveyable: Set<SectorCoordinate>,
     onStart: (SectorCoordinate) -> Unit,
     onDrag: (SectorCoordinate) -> Unit,
+    onEnd: () -> Unit,
 ): Modifier = this.then(
-    Modifier.pointerInput(gridPixels) {
-        detectDragGesturesAfterLongPress(
-            onDragStart = { offset -> coordinateAt(offset, gridPixels)?.let(onStart) },
-            onDrag = { change, _ ->
-                coordinateAt(change.position, gridPixels)?.let(onDrag)
-                change.consume()
+    Modifier.pointerInput(gridPixels, surveyable) {
+        var selecting = false
+        detectDragGestures(
+            onDragStart = { offset ->
+                val coordinate = coordinateAt(offset, gridPixels)
+                selecting = coordinate != null && coordinate in surveyable
+                if (selecting) onStart(requireNotNull(coordinate))
             },
+            onDrag = { change, _ ->
+                if (selecting) {
+                    coordinateAt(change.position, gridPixels)
+                        ?.takeIf { it in surveyable }
+                        ?.let(onDrag)
+                    change.consume()
+                }
+            },
+            onDragEnd = {
+                if (selecting) onEnd()
+                selecting = false
+            },
+            onDragCancel = { selecting = false },
         )
     },
 )
@@ -150,6 +187,12 @@ internal fun coordinateAt(offset: Offset, size: IntSize): SectorCoordinate? {
     return SectorCoordinate(column - 4, row - 4)
 }
 
+internal fun isResurveyAvailable(tile: WorldTile, scanningLevel: Int): Boolean =
+    tile.coordinate != SectorCoordinate(0, 0) &&
+        tile.revealed &&
+        tile.lastScannedAtLevel > 0 &&
+        tile.lastScannedAtLevel < scanningLevel
+
 @Composable
 private fun ColonyMapTile(
     tile: WorldTile,
@@ -157,6 +200,7 @@ private fun ColonyMapTile(
     queued: Boolean,
     selected: Boolean,
     multiSelected: Boolean,
+    resurveyAvailable: Boolean,
     problem: Boolean,
     dimmed: Boolean,
     onClick: () -> Unit,
@@ -178,7 +222,7 @@ private fun ColonyMapTile(
             .border(if (selected) 2.dp else 1.dp, borderColor, shape)
             .clickable(onClick = onClick)
             .semantics {
-                contentDescription = tileDescription(tile, activeSurvey, queued)
+                contentDescription = tileDescription(tile, activeSurvey, queued, resurveyAvailable)
                 this.selected = selected
             },
     ) {
@@ -206,6 +250,22 @@ private fun ColonyMapTile(
             maxLines = 2,
             lineHeight = 6.sp,
         )
+        if (resurveyAvailable) {
+            val activeResurvey = activeSurvey?.resurvey == true
+            Text(
+                text = when {
+                    activeResurvey -> "?\nRESCAN"
+                    queued -> "?\nQUEUED"
+                    else -> "?"
+                },
+                modifier = Modifier.align(Alignment.BottomStart).padding(2.dp),
+                color = Color(0xFFFFD166),
+                fontSize = if (activeResurvey || queued) 4.7.sp else 10.sp,
+                lineHeight = 5.sp,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (problem) {
             Text(
                 text = "!",
@@ -214,6 +274,53 @@ private fun ColonyMapTile(
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Black,
             )
+        }
+    }
+}
+
+@Composable
+private fun SurveyHud(
+    scanningLevel: Int,
+    slots: Int,
+    active: List<SurveyTask>,
+    queuedCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val lead = active.firstOrNull()
+    val progress = lead?.let { task ->
+        if (task.totalDays <= 0) 1f else (1.0 - task.daysRemaining / task.totalDays.toDouble()).coerceIn(0.0, 1.0).toFloat()
+    } ?: 0f
+    Surface(
+        modifier = modifier.widthIn(min = 104.dp, max = 150.dp),
+        color = MineItPalette.Control.copy(alpha = .94f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MineItPalette.Survey.copy(alpha = .48f)),
+        shape = RoundedCornerShape(5.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("SCANNING • L$scanningLevel", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MineItPalette.Survey)
+            Text(
+                "${active.size}/${slots.coerceAtLeast(1)} ACTIVE • $queuedCount QUEUED",
+                style = MaterialTheme.typography.labelSmall,
+                color = MineItPalette.Text,
+                maxLines = 1,
+            )
+            lead?.let { task ->
+                Text(
+                    "${task.coordinate.x},${task.coordinate.y} • ${if (task.resurvey) "RESCAN" else "SURVEY"} • ${ceil(task.daysRemaining).toInt()}d",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MineItPalette.Muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Box(Modifier.fillMaxWidth().height(3.dp).background(MineItPalette.Line, RoundedCornerShape(99.dp))) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth(progress)
+                            .height(3.dp)
+                            .background(MineItPalette.Survey, RoundedCornerShape(99.dp)),
+                    )
+                }
+            }
         }
     }
 }
@@ -265,8 +372,10 @@ private fun TileArtwork(tile: WorldTile, modifier: Modifier = Modifier) {
 
 private fun tileMarker(tile: WorldTile, active: SurveyTask?, queued: Boolean): Pair<String, Color> {
     if (tile.coordinate == SectorCoordinate(0, 0)) return "PORT" to MineItPalette.Accent
-    if (active != null) return "${ceil(active.daysRemaining).toInt()}d" to MineItPalette.Survey
-    if (queued) return "QUEUE" to MineItPalette.Survey
+    if (!tile.revealed) {
+        if (active != null) return "SCANNING\n${ceil(active.daysRemaining).toInt()}d" to MineItPalette.Survey
+        if (queued) return "QUEUED" to MineItPalette.Survey
+    }
     tile.development?.let { development ->
         val label = when (development.kind) {
             DevelopmentKind.POWER -> "PWR"
@@ -288,11 +397,13 @@ private fun tileMarker(tile: WorldTile, active: SurveyTask?, queued: Boolean): P
     return "CLEAR" to MineItPalette.Success
 }
 
-private fun tileDescription(tile: WorldTile, active: SurveyTask?, queued: Boolean): String = buildString {
+private fun tileDescription(tile: WorldTile, active: SurveyTask?, queued: Boolean, resurveyAvailable: Boolean): String = buildString {
     append("Sector ${tile.coordinate.x}, ${tile.coordinate.y}. ${tile.terrain.name.lowercase()} terrain. ")
     when {
-        active != null -> append("Survey active, ${ceil(active.daysRemaining).toInt()} days remaining.")
+        active != null -> append("${if (active.resurvey) "Resurvey" else "Survey"} active, ${ceil(active.daysRemaining).toInt()} days remaining.")
+        queued && resurveyAvailable -> append("Queued for resurvey.")
         queued -> append("Queued for survey.")
+        resurveyAvailable -> append("Previously surveyed with older scanning technology; resurvey available.")
         !tile.revealed -> append("Unsurveyed.")
         tile.development != null -> append("${tile.development.kind.name.lowercase()} level ${tile.development.level}.")
         tile.deposit != null -> append("${tile.deposit.name}, quality ${tile.deposit.quality}.")
