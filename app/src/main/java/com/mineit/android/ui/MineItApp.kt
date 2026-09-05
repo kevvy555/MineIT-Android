@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mineit.android.app.ColonyAttentionTarget
 import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.world.DevelopmentKind
@@ -24,6 +25,8 @@ import com.mineit.android.ui.commercial.CorporateEventDialog
 import com.mineit.android.ui.commercial.TradeCommercialPanelScreen
 import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.game.ColonyEstablishmentDialog
+import com.mineit.android.ui.game.CriticalResourceWarningDialog
+import com.mineit.android.ui.map.MapFocus
 import com.mineit.android.ui.theme.MineItTheme
 
 @Composable
@@ -35,6 +38,8 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
     val metrics by viewModel.metrics.collectAsStateWithLifecycle()
     val network by viewModel.network.collectAsStateWithLifecycle()
     val spaceport by viewModel.spaceport.collectAsStateWithLifecycle()
+    val attention by viewModel.attention.collectAsStateWithLifecycle()
+    val criticalResourceAlert by viewModel.criticalResourceAlert.collectAsStateWithLifecycle()
     val simulationSpeed by viewModel.simulationSpeed.collectAsStateWithLifecycle()
     val establishmentPrompt by viewModel.establishmentPrompt.collectAsStateWithLifecycle()
     val selectedCoordinates by viewModel.selectedSectors.collectAsStateWithLifecycle()
@@ -77,6 +82,7 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     metrics = metrics,
                     network = network,
                     spaceport = spaceport,
+                    attention = attention,
                     simulationSpeed = simulationSpeed,
                     selectedTiles = selectedTiles,
                     selectedSurveyDays = singleCoordinate?.let(viewModel::surveyDays),
@@ -109,6 +115,22 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onAdvanceDay = viewModel::advanceDay,
                     onSetSimulationSpeed = viewModel::setSimulationSpeed,
                     onOpenCommercial = { viewModel.openCommercialPanel(CommercialPanel.TRADE) },
+                    onOpenAttention = {
+                        when (attention.target) {
+                            ColonyAttentionTarget.LANDING_SITE -> Unit
+                            ColonyAttentionTarget.CORPORATE_SHIP -> viewModel.openCommercialPanel(CommercialPanel.TRADE)
+                            ColonyAttentionTarget.PLAYER_SHIP,
+                            ColonyAttentionTarget.ESTABLISHMENT -> showEstablishment = true
+                            ColonyAttentionTarget.FOOD -> viewModel.setMapFocus(MapFocus.FOOD)
+                            ColonyAttentionTarget.POWER -> viewModel.setMapFocus(MapFocus.POWER)
+                            ColonyAttentionTarget.FUEL -> viewModel.setMapFocus(MapFocus.FUEL)
+                            ColonyAttentionTarget.INDUSTRY -> viewModel.setMapFocus(MapFocus.INDUSTRY)
+                            ColonyAttentionTarget.HOUSING -> viewModel.setMapFocus(MapFocus.HOUSING)
+                            ColonyAttentionTarget.ORE -> viewModel.setMapFocus(MapFocus.ORE)
+                            ColonyAttentionTarget.PROBLEMS -> viewModel.setMapFocus(MapFocus.PROBLEMS)
+                            ColonyAttentionTarget.COLONY -> Unit // handled inside MineItScreen
+                        }
+                    },
                     onMainMenu = viewModel::returnToMainMenu,
                 )
 
@@ -202,6 +224,13 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                             showEstablishment = false
                         },
                         onDismiss = { showEstablishment = false },
+                    )
+                }
+
+                criticalResourceAlert?.let { alert ->
+                    CriticalResourceWarningDialog(
+                        alert = alert,
+                        onDismiss = viewModel::dismissCriticalResourceAlert,
                     )
                 }
             }

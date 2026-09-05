@@ -4,6 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.mineit.android.app.AppComposition
+import com.mineit.android.app.ColonyAttention
+import com.mineit.android.app.ColonyAttentionPolicy
+import com.mineit.android.app.CriticalResourceAlert
+import com.mineit.android.app.CriticalResourceEpisodeTracker
 import com.mineit.android.app.SimulationClock
 import com.mineit.android.app.persistence.PersistenceLoadResult
 import com.mineit.android.app.persistence.PersistenceSaveResult
@@ -59,6 +63,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val contractService = composition.contractService
     private val buyerService = composition.buyerService
     private val corporateEventService = composition.corporateEventService
+    private val attentionPolicy = ColonyAttentionPolicy()
+    private val criticalResourceEpisodes = CriticalResourceEpisodeTracker()
 
     val state: StateFlow<GameState> = session.state
 
@@ -76,6 +82,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val spaceport: StateFlow<SpaceportStatus> = _spaceport.asStateFlow()
     private val _establishmentPrompt = MutableStateFlow(0L)
     val establishmentPrompt: StateFlow<Long> = _establishmentPrompt.asStateFlow()
+    private val _attention = MutableStateFlow(attentionFor(state.value, _metrics.value, _network.value))
+    val attention: StateFlow<ColonyAttention> = _attention.asStateFlow()
+    private val _criticalResourceAlert = MutableStateFlow<CriticalResourceAlert?>(null)
+    val criticalResourceAlert: StateFlow<CriticalResourceAlert?> = _criticalResourceAlert.asStateFlow()
 
     private val _selectedSector = MutableStateFlow<SectorCoordinate?>(null)
     val selectedSector: StateFlow<SectorCoordinate?> = _selectedSector.asStateFlow()
@@ -129,12 +139,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_entryReady.value) return
         viewModelScope.launch {
             simulationClock.setSpeed(0)
+            criticalResourceEpisodes.reset()
+            _criticalResourceAlert.value = null
             val result = session.reset("new-game", composition.createNewGame())
             resetMapUi(); _commercialPanel.value = null
             refreshDerived(result.state)
             _canContinue.value = result.persistence is PersistenceSaveResult.Success
             _screen.value = GameScreen.GAME
             _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) "New Contract 01 game started. Choose a landing site." else "New game started, but the native save could not be written."
+            evaluateCriticalResourceWarning()
         }
     }
 
@@ -143,20 +156,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         simulationClock.setSpeed(0); resetMapUi(); refreshDerived(state.value)
         _screen.value = GameScreen.GAME; _statusMessage.value = null
         establishmentAssessment().takeIf { it.required && !it.acknowledged && state.value.activeColony.world.settled }?.let { _establishmentPrompt.value++ }
+        evaluateCriticalResourceWarning()
     }
 
     fun returnToMainMenu() {
-        simulationClock.setSpeed(0); clearSelection(); _commercialPanel.value = null
+        simulationClock.setSpeed(0); clearSelection(); _commercialPanel.value = null; _criticalResourceAlert.value = null
         _canContinue.value = state.value.activeColony.status !in setOf(ColonyStatus.DEAD, ColonyStatus.CONTRACT_FAILED) && !state.value.company.gameOver
         _screen.value = GameScreen.MAIN_MENU; _statusMessage.value = null
     }
 
     fun handleBack() {
         when {
+            _criticalResourceAlert.value != null -> dismissCriticalResourceAlert()
             _commercialPanel.value != null -> _commercialPanel.value = null
             _selectedSectors.value.isNotEmpty() -> clearSelection()
             else -> returnToMainMenu()
         }
+    }
+
+    fun dismissCriticalResourceAlert() {
+        _criticalResourceAlert.value = null
+        evaluateCriticalResourceWarning()
     }
 
     fun selectLandingSite(index: Int) {
@@ -299,6 +319,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         if (_currentCorporateEvent.value != null && speed > 0) { _statusMessage.value = "Resolve the corporate event before resuming simulation."; return }
+        if (_criticalResourceAlert.value != null && speed > 0) { _statusMessage.value = "A critical survival warning must be acknowledged before resuming simulation."; return }
         simulationClock.setSpeed(speed); _statusMessage.value = if (speed == 0) "Simulation paused." else "Simulation running at ${speed}×."
     }
 
@@ -463,7 +484,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun advanceSimulationDay(fromClock: Boolean) {
-        if (!state.value.activeColony.world.settled || _currentCorporateEvent.value != null) return
+        if (!state.value.activeColony.world.settled || _currentCorporateEvent.value != null || _criticalResourceAlert.value != null) return
         val establishment = establishmentAssessment()
         if (establishment.required && !establishment.acknowledged) {
             simulationClock.setSpeed(0)
@@ -487,6 +508,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (result.shouldPause) simulationClock.setSpeed(0)
         if (commit.persistence is PersistenceSaveResult.Failure) { _statusMessage.value = "Day advanced, but the native save could not be written."; return }
         _statusMessage.value = when {
+            _criticalResourceAlert.value != null -> "Critical survival reserve requires attention."
             result.shouldPause -> "Corporate event requires attention."
             result.simulation.deaths > .0001 -> "Life-support shortage caused ${formatPopulation(result.simulation.deaths)} deaths this day."
             result.simulation.completedSurveys.isNotEmpty() -> "Survey completed for ${result.simulation.completedSurveys.joinToString { "${it.x},${it.y}" }}."
@@ -501,6 +523,32 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _spaceport.value = spaceportService.status(gameState, nextNetwork)
         _metrics.value = completedDayMetrics ?: dailySimulationEngine.recalculate(gameState)
         _currentCorporateEvent.value = gameState.corporateEvents.pending.firstOrNull()
+        _attention.value = attentionFor(gameState, _metrics.value, nextNetwork)
+        evaluateCriticalResourceWarning()
+    }
+
+    private fun attentionFor(
+        gameState: GameState,
+        metrics: ColonyMetrics,
+        network: ColonyNetworkSnapshot,
+    ): ColonyAttention {
+        val establishment = establishmentService.assessment(
+            state = gameState,
+            network = network,
+            foodProduction = metrics.foodProduction,
+            fuelProduction = metrics.fuelProduction,
+        )
+        return attentionPolicy.current(gameState, metrics, establishment)
+    }
+
+    private fun evaluateCriticalResourceWarning() {
+        if (_screen.value != GameScreen.GAME || _criticalResourceAlert.value != null) return
+        if (state.value.company.gameOver || state.value.activeColony.status == ColonyStatus.DEAD) return
+        val alert = criticalResourceEpisodes.next(
+            attentionPolicy.criticalSnapshot(_metrics.value, establishmentAssessment()),
+        ) ?: return
+        simulationClock.setSpeed(0)
+        _criticalResourceAlert.value = alert
     }
 
     private fun resetMapUi() { _selectedSector.value = null; _selectedSectors.value = emptySet(); _mapFocus.value = MapFocus.ALL; _mapFilters.value = emptySet() }

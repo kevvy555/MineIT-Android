@@ -10,6 +10,9 @@ enum class MapFocus(val label: String) {
     ALL("ALL"),
     PROBLEMS("PROBLEMS"),
     BUILDINGS("BUILDINGS"),
+    POWER("POWER"),
+    INDUSTRY("INDUSTRY"),
+    HOUSING("HOUSING"),
     FOOD("FOOD"),
     BUILD("BUILD"),
     FUEL("FUEL"),
@@ -36,6 +39,9 @@ object MapPresentation {
             MapFocus.ALL -> true
             MapFocus.PROBLEMS -> isProblem(tile, network)
             MapFocus.BUILDINGS -> tile.development != null || tile.coordinate == SectorCoordinate(0, 0)
+            MapFocus.POWER -> tile.development?.kind == DevelopmentKind.POWER
+            MapFocus.INDUSTRY -> tile.development?.kind == DevelopmentKind.INDUSTRY
+            MapFocus.HOUSING -> tile.development?.kind == DevelopmentKind.HOUSING
             MapFocus.FOOD -> tile.deposit?.category == ResourceCategory.FOOD
             MapFocus.BUILD -> tile.deposit?.category == ResourceCategory.BUILD
             MapFocus.FUEL -> tile.deposit?.category == ResourceCategory.FUEL

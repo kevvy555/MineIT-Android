@@ -28,9 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mineit.android.app.ColonyAttention
+import com.mineit.android.app.ColonyAttentionTarget
 import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.colony.DevelopmentPreview
 import com.mineit.android.domain.colony.HeadquartersDepartureGate
@@ -47,6 +48,7 @@ import com.mineit.android.ui.design.MineItPalette
 import com.mineit.android.ui.design.MineItPanel
 import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.design.MineItSpacing
+import com.mineit.android.ui.game.ColonyAttentionStrip
 import com.mineit.android.ui.game.ColonyDetailSheet
 import com.mineit.android.ui.game.GameHeader
 import com.mineit.android.ui.game.SectorContextBar
@@ -60,6 +62,7 @@ fun MineItScreen(
     metrics: ColonyMetrics,
     network: ColonyNetworkSnapshot,
     spaceport: SpaceportStatus,
+    attention: ColonyAttention,
     simulationSpeed: Int,
     selectedTiles: List<WorldTile>,
     selectedSurveyDays: Int?,
@@ -92,6 +95,7 @@ fun MineItScreen(
     onAdvanceDay: () -> Unit,
     onSetSimulationSpeed: (Int) -> Unit,
     onOpenCommercial: () -> Unit,
+    onOpenAttention: () -> Unit,
     onMainMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -119,6 +123,13 @@ fun MineItScreen(
                 onOpenColonyDetail = { showColonyDetail = true },
             )
 
+            ColonyAttentionStrip(
+                attention = attention,
+                onClick = {
+                    if (attention.target == ColonyAttentionTarget.COLONY) showColonyDetail = true
+                    else onOpenAttention()
+                },
+            )
             statusMessage?.let { StatusStrip(it) }
 
             if (colony.status == ColonyStatus.SITE_SELECTION) {
