@@ -1,17 +1,22 @@
 package com.mineit.android.ui.commercial
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -44,9 +49,9 @@ import kotlin.math.round
 private enum class TradeMode { SELL, BUY, COLONISTS }
 
 /**
- * Corporate trade screen intentionally mirrors the pinned web workflow rather than the generic
- * Android dashboard: visit summary -> Sell/Buy/Colonists modes -> explicit ship departure.
- * Compose owns only transient selection/filter/page state; all trade rules come from domain queries.
+ * Full-screen Corporate Ship surface following the maintained web quick-trade hierarchy:
+ * fixed visit summary -> fixed Sell/Buy/Colonists tabs -> four-row work area -> fixed departure.
+ * Compose owns transient selection/paging only; authoritative trade rules remain in domain services.
  */
 @Composable
 fun TradeCommercialPanelScreen(
@@ -74,145 +79,159 @@ fun TradeCommercialPanelScreen(
 ) {
     val colony = state.activeColony
     val trade = colony.trade
+    val colonistsAvailable = CorporateTradePresentation.colonistsAvailable(state)
     var modeName by rememberSaveable { mutableStateOf(TradeMode.SELL.name) }
-    var amount by rememberSaveable { mutableStateOf(10_000.0) }
-    var buyCategoryName by rememberSaveable { mutableStateOf("FUEL") }
-    var buyPage by rememberSaveable { mutableStateOf(0) }
-    var sellPage by rememberSaveable { mutableStateOf(0) }
-    var colonists by rememberSaveable { mutableStateOf(1) }
-    val mode = TradeMode.valueOf(modeName)
+    var sellAmount by rememberSaveable { mutableStateOf(10_000.0) }
+    var buyAmount by rememberSaveable { mutableStateOf(10_000.0) }
+    var buyCategoryName by rememberSaveable { mutableStateOf(ResourceCategory.FUEL.name) }
+    var buyPage by rememberSaveable { mutableIntStateOf(0) }
+    var sellPage by rememberSaveable { mutableIntStateOf(0) }
+    var colonists by rememberSaveable { mutableIntStateOf(0) }
+    var colonistVisit by rememberSaveable { mutableIntStateOf(-1) }
+    var mode = TradeMode.valueOf(modeName)
+
+    if (!colonistsAvailable && mode == TradeMode.COLONISTS) {
+        modeName = TradeMode.SELL.name
+        mode = TradeMode.SELL
+    }
+
+    LaunchedEffect(trade.visits, colonistProjection.maxSafeTransfer, colonistProjection.maxTransfer) {
+        if (trade.visits != colonistVisit) {
+            colonistVisit = trade.visits
+            colonists = CorporateTradePresentation.defaultColonistAmount(colonistProjection)
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MineItPalette.Background) {
         Column(
             modifier = Modifier.fillMaxSize().padding(MineItSpacing.Sm),
-            verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+            verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
-            ) {
-                Text(
-                    "CORPORATE TRADE SHIP",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MineItPalette.Accent,
-                    fontWeight = FontWeight.Bold,
-                )
-                MineItSecondaryButton("CLOSE", onClose)
+            CorporateShipHeader(
+                colonyName = colony.name,
+                active = trade.active,
+                daysUntilArrival = daysUntilArrival,
+                onClose = onClose,
+            )
+
+            if (!trade.active) {
+                MineItPanel(modifier = Modifier.fillMaxWidth()) {
+                    MineItSectionHeader("CONGLOMERATE TRADE SHIP", "${daysUntilArrival}d")
+                    Text(
+                        "Next scheduled visit in $daysUntilArrival day(s). Trade controls become available when the corporate ship docks.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MineItPalette.Muted,
+                    )
+                    Text(
+                        spaceport.reason,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (spaceport.operational) MineItPalette.Success else MineItPalette.Warning,
+                    )
+                }
+                return@Column
             }
+
+            TradeSummaryGrid(
+                cash = state.company.cash,
+                cargoRemaining = cargoRemaining,
+                cargoCapacity = cargoCapacity,
+                exportRemaining = exportRemaining,
+                exportCapacity = exportCapacity,
+                passengerRemaining = if (colonistsAvailable) passengerRemaining else null,
+            )
+
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                CommercialPanel.entries.forEach { panel ->
+                TradeMode.entries.forEach { candidate ->
+                    val enabled = candidate != TradeMode.COLONISTS || colonistsAvailable
                     MineItSecondaryButton(
-                        text = panel.name,
-                        onClick = { onSelectPanel(panel) },
-                        selected = panel == CommercialPanel.TRADE,
+                        text = candidate.name,
+                        onClick = { if (enabled) modeName = candidate.name },
+                        selected = candidate == mode,
                         modifier = Modifier.weight(1f),
+                        enabled = enabled,
                     )
                 }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
-            ) {
-                item {
-                    MineItPanel {
-                        MineItSectionHeader(
-                            "CONGLOMERATE TRADE SHIP",
-                            if (trade.active) "DOCKED" else "${daysUntilArrival}d",
-                        )
-                        if (trade.active) {
-                            TradeSummaryGrid(
-                                cash = state.company.cash,
-                                cargoRemaining = cargoRemaining,
-                                cargoCapacity = cargoCapacity,
-                                exportRemaining = exportRemaining,
-                                exportCapacity = exportCapacity,
-                                passengerRemaining = passengerRemaining,
-                            )
-                        } else {
-                            Text(
-                                "Next scheduled visit in $daysUntilArrival day(s). Trade controls become available when the corporate ship docks.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MineItPalette.Muted,
-                            )
-                        }
-                        Text(
-                            spaceport.reason,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (spaceport.operational) MineItPalette.Success else MineItPalette.Warning,
-                        )
-                    }
-                }
+            Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                when (mode) {
+                    TradeMode.SELL -> SellTradeContent(
+                        state = state,
+                        amount = sellAmount,
+                        exportRemaining = exportRemaining,
+                        page = sellPage,
+                        onPage = { sellPage = it },
+                        onAmount = { sellAmount = it.coerceIn(0.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
+                        sellableAmount = sellableAmount,
+                        sellQuote = sellQuote,
+                        onSetReserve = onSetReserve,
+                        onSellResource = onSellResource,
+                        onSellCategory = onSellCategory,
+                        onSellAll = onSellAll,
+                        enabled = spaceport.tradeAllowed,
+                    )
 
-                if (trade.active) {
-                    item {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                            TradeMode.entries.forEach { candidate ->
-                                MineItSecondaryButton(
-                                    text = candidate.name,
-                                    onClick = { modeName = candidate.name },
-                                    selected = candidate == mode,
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
-                        }
-                    }
+                    TradeMode.BUY -> BuyTradeContent(
+                        state = state,
+                        amount = buyAmount,
+                        cargoRemaining = cargoRemaining,
+                        categoryName = buyCategoryName,
+                        page = buyPage,
+                        onCategory = { buyCategoryName = it; buyPage = 0 },
+                        onPage = { buyPage = it },
+                        onAmount = { buyAmount = it.coerceIn(0.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
+                        buyPrice = buyPrice,
+                        onBuyResource = onBuyResource,
+                        enabled = spaceport.tradeAllowed,
+                    )
 
-                    item {
-                        when (mode) {
-                            TradeMode.SELL -> SellTradeContent(
-                                state = state,
-                                amount = amount,
-                                exportRemaining = exportRemaining,
-                                page = sellPage,
-                                onPage = { sellPage = it },
-                                onAmount = { amount = it.coerceAtLeast(0.0) },
-                                sellableAmount = sellableAmount,
-                                sellQuote = sellQuote,
-                                onSetReserve = onSetReserve,
-                                onSellResource = onSellResource,
-                                onSellCategory = onSellCategory,
-                                onSellAll = onSellAll,
-                                enabled = spaceport.tradeAllowed,
-                            )
-
-                            TradeMode.BUY -> BuyTradeContent(
-                                state = state,
-                                amount = amount,
-                                cargoRemaining = cargoRemaining,
-                                categoryName = buyCategoryName,
-                                page = buyPage,
-                                onCategory = { buyCategoryName = it; buyPage = 0 },
-                                onPage = { buyPage = it },
-                                onAmount = { amount = it.coerceAtLeast(0.0) },
-                                buyPrice = buyPrice,
-                                onBuyResource = onBuyResource,
-                                enabled = spaceport.tradeAllowed,
-                            )
-
-                            TradeMode.COLONISTS -> ColonistTradeContent(
-                                state = state,
-                                selected = colonists,
-                                projection = colonistProjection,
-                                enabled = spaceport.transfersAllowed,
-                                onSelected = { colonists = it.coerceIn(0, colonistProjection.maxTransfer) },
-                                onTransfer = onTransferColonists,
-                            )
-                        }
-                    }
-
-                    item {
-                        MineItDestructiveButton(
-                            "SHIP DEPARTS",
-                            onDepartCorporateShip,
-                            Modifier.fillMaxWidth(),
-                        )
-                    }
+                    TradeMode.COLONISTS -> ColonistTradeContent(
+                        state = state,
+                        selected = colonists,
+                        projection = colonistProjection,
+                        enabled = spaceport.transfersAllowed,
+                        onSelected = { colonists = it.coerceIn(0, colonistProjection.maxTransfer) },
+                        onTransfer = onTransferColonists,
+                    )
                 }
             }
+
+            MineItDestructiveButton(
+                "SHIP DEPARTS",
+                onDepartCorporateShip,
+                Modifier.fillMaxWidth(),
+            )
         }
+    }
+}
+
+@Composable
+private fun CorporateShipHeader(
+    colonyName: String,
+    active: Boolean,
+    daysUntilArrival: Int,
+    onClose: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "CORPORATE TRADE SHIP",
+                style = MaterialTheme.typography.titleMedium,
+                color = MineItPalette.Accent,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                if (active) "KOPLIN DEEP REACH • LOGISTICS VESSEL • DOCKED AT $colonyName"
+                else "KOPLIN DEEP REACH • NEXT SERVICE IN ${daysUntilArrival}d",
+                style = MaterialTheme.typography.bodySmall,
+                color = MineItPalette.Muted,
+            )
+        }
+        MineItSecondaryButton("CLOSE", onClose)
     }
 }
 
@@ -223,16 +242,27 @@ private fun TradeSummaryGrid(
     cargoCapacity: Double,
     exportRemaining: Double,
     exportCapacity: Double,
-    passengerRemaining: Int,
+    passengerRemaining: Int?,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-            MineItStat("CASH", "£${formatMoney(cash)}", Modifier.weight(1f))
-            MineItStat("IMPORT", "${format(cargoRemaining)}/${format(cargoCapacity)}", Modifier.weight(1f))
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-            MineItStat("EXPORT", "${format(exportRemaining)}/${format(exportCapacity)}", Modifier.weight(1f))
-            MineItStat("PAX", passengerRemaining.toString(), Modifier.weight(1f))
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth.value < 370f) {
+            Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+                    MineItStat("CASH", "£${formatMoney(cash)}", Modifier.weight(1f))
+                    MineItStat("IMPORT", "${format(cargoRemaining)}/${format(cargoCapacity)}", Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+                    MineItStat("EXPORT", "${format(exportRemaining)}/${format(exportCapacity)}", Modifier.weight(1f))
+                    MineItStat("PAX", passengerRemaining?.toString() ?: "—", Modifier.weight(1f))
+                }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+                MineItStat("CASH", "£${formatMoney(cash)}", Modifier.weight(1f))
+                MineItStat("IMPORT", "${format(cargoRemaining)}/${format(cargoCapacity)}", Modifier.weight(1f))
+                MineItStat("EXPORT", "${format(exportRemaining)}/${format(exportCapacity)}", Modifier.weight(1f))
+                MineItStat("PAX", passengerRemaining?.toString() ?: "—", Modifier.weight(1f))
+            }
         }
     }
 }
@@ -254,83 +284,71 @@ private fun SellTradeContent(
     enabled: Boolean,
 ) {
     val colony = state.activeColony
-    val stocks = colony.inventory.resources
-        .filter { it.amount > .0001 }
-        .sortedWith(compareBy({ it.category.ordinal }, { ResourceCatalogue.get(it.resourceId)?.name ?: it.resourceId.value }))
-    val pageSize = 4
-    val pageCount = max(1, ceil(stocks.size / pageSize.toDouble()).toInt())
+    val stocks = CorporateTradePresentation.sellStocks(state, sellableAmount)
+    val pageCount = max(1, ceil(stocks.size / CorporateTradePresentation.PAGE_SIZE.toDouble()).toInt())
     val safePage = page.coerceIn(0, pageCount - 1)
-    val visible = stocks.drop(safePage * pageSize).take(pageSize)
+    val visible = stocks.drop(safePage * CorporateTradePresentation.PAGE_SIZE).take(CorporateTradePresentation.PAGE_SIZE)
 
-    Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
-        MineItPanel {
-            MineItSectionHeader("SELL COLONY STOCK", "EXPORT ${format(exportRemaining)}")
-            Text(
-                "Highest-value quality lots sell first. The colony reserve is protected independently for every resource.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MineItPalette.Muted,
-            )
-            TradeAmountSelector(amount, exportRemaining, onAmount)
-        }
-
-        MineItPanel {
-            MineItSectionHeader("COLONY TRADE RESERVE", format(colony.tradeReserve))
-            MineItActionRow {
-                MineItSecondaryButton("0", { onSetReserve(0.0) }, Modifier.weight(1f))
-                MineItSecondaryButton("-100", { onSetReserve((colony.tradeReserve - 100.0).coerceAtLeast(0.0)) }, Modifier.weight(1f))
-                MineItSecondaryButton("+100", { onSetReserve(colony.tradeReserve + 100.0) }, Modifier.weight(1f))
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+        MineItSectionHeader("SELL COLONY STOCK", "EXPORT ${format(exportRemaining)}")
+        Text(
+            "Highest-value quality lots sell first. One colony-wide reserve amount is protected for every individual resource.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MineItPalette.Muted,
+        )
+        TradeAmountSelector(amount, onAmount)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+            ResourceCategory.entries.forEach { category ->
+                val available = stocks.any { it.category == category }
+                MineItSecondaryButton(
+                    "ALL ${category.name}",
+                    { onSellCategory(category) },
+                    Modifier.weight(1f),
+                    enabled = enabled && exportRemaining > .0001 && available,
+                )
             }
         }
-
-        MineItPanel {
-            MineItSectionHeader("QUICK SELL", "BY CATEGORY")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                ResourceCategory.entries.forEach { category ->
-                    MineItSecondaryButton(
-                        category.name,
-                        { onSellCategory(category) },
-                        Modifier.weight(1f),
-                        enabled = enabled && exportRemaining > .0001,
-                    )
-                }
-            }
-            MineItPrimaryButton(
-                "SELL ALL AVAILABLE STOCK",
-                onSellAll,
-                Modifier.fillMaxWidth(),
-                enabled = enabled && exportRemaining > .0001 && stocks.any { sellableAmount(it.resourceId) > .0001 },
-            )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+            Text("RESERVE ${format(colony.tradeReserve)} / RESOURCE", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MineItPalette.Muted)
+            MineItSecondaryButton("0", { onSetReserve(0.0) })
+            MineItSecondaryButton("-100", { onSetReserve((colony.tradeReserve - 100.0).coerceAtLeast(0.0)) })
+            MineItSecondaryButton("+100", { onSetReserve(colony.tradeReserve + 100.0) })
         }
 
         if (visible.isEmpty()) {
-            MineItPanel { Text("No colony stock is currently available to sell.", color = MineItPalette.Muted) }
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                Text("No stock is available above the colony reserve.", color = MineItPalette.Muted)
+            }
         } else {
-            visible.forEach { stock ->
-                val definition = ResourceCatalogue.get(stock.resourceId)
-                val sellable = sellableAmount(stock.resourceId)
-                val quote = sellQuote(stock.resourceId, amount)
-                MineItPanel {
-                    MineItSectionHeader(definition?.name ?: stock.resourceId.value, stock.category.name)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                        MineItStat("STOCK", format(stock.amount), Modifier.weight(1f))
-                        MineItStat("RESERVE", format(colony.tradeReserve), Modifier.weight(1f))
-                        MineItStat("SELLABLE", format(sellable), Modifier.weight(1f))
-                    }
-                    Text(
-                        "Selected ${format(quote.quantity)} • Revenue £${formatMoney(quote.value)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MineItPalette.Muted,
-                    )
-                    MineItPrimaryButton(
-                        "SELL ${format(amount)}",
-                        { onSellResource(stock.resourceId, amount) },
-                        Modifier.fillMaxWidth(),
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+            ) {
+                items(visible.size) { index ->
+                    val stock = visible[index]
+                    val definition = ResourceCatalogue.get(stock.resourceId)
+                    val sellable = sellableAmount(stock.resourceId)
+                    val quote = sellQuote(stock.resourceId, amount)
+                    CompactTradeRow(
+                        title = definition?.name ?: stock.resourceId.value,
+                        detail = "${format(stock.amount)} stock • ${format(colony.tradeReserve)} reserve • ${format(sellable)} sellable",
+                        action = if (quote.quantity > .0001) "SELL ${format(quote.quantity)}\n£${formatMoney(quote.value)}" else "SELL",
                         enabled = enabled && quote.quantity > .0001,
+                        onAction = { onSellResource(stock.resourceId, amount) },
                     )
                 }
             }
         }
-        Pager(safePage, pageCount, onPage)
+
+        MineItActionRow {
+            MineItPrimaryButton(
+                "SELL ALL AVAILABLE STOCK",
+                onSellAll,
+                Modifier.weight(1f),
+                enabled = enabled && exportRemaining > .0001 && stocks.isNotEmpty(),
+            )
+            Pager(safePage, pageCount, onPage)
+        }
     }
 }
 
@@ -348,70 +366,50 @@ private fun BuyTradeContent(
     onBuyResource: (ResourceId, Double) -> Unit,
     enabled: Boolean,
 ) {
-    val colony = state.activeColony
-    val category = ResourceCategory.entries.firstOrNull { it.name == categoryName }
-    val resources = ResourceCatalogue.all.filter { category == null || it.category == category }
-    val pageSize = 4
-    val pageCount = max(1, ceil(resources.size / pageSize.toDouble()).toInt())
+    val category = CorporateTradePresentation.buyCategories.firstOrNull { it.name == categoryName } ?: ResourceCategory.FUEL
+    val rows = CorporateTradePresentation.buyRows(state, category)
+    val pageCount = max(1, ceil(rows.size / CorporateTradePresentation.PAGE_SIZE.toDouble()).toInt())
     val safePage = page.coerceIn(0, pageCount - 1)
-    val visible = resources.drop(safePage * pageSize).take(pageSize)
+    val visible = rows.drop(safePage * CorporateTradePresentation.PAGE_SIZE).take(CorporateTradePresentation.PAGE_SIZE)
 
-    Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
-        MineItPanel {
-            MineItSectionHeader("BUY FROM CORPORATION", "IMPORT ${format(cargoRemaining)}")
-            TradeAmountSelector(amount, cargoRemaining, onAmount)
-            Text(
-                "The corporate ship limits purchases by remaining cargo and available company cash.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MineItPalette.Muted,
-            )
-        }
-
-        MineItPanel {
-            MineItSectionHeader("RESOURCE CATEGORY", categoryName)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                listOf("ALL", "FOOD", "BUILD").forEach { label ->
-                    MineItSecondaryButton(label, { onCategory(label) }, Modifier.weight(1f), selected = categoryName == label)
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                listOf("FUEL", "ORE").forEach { label ->
-                    MineItSecondaryButton(label, { onCategory(label) }, Modifier.weight(1f), selected = categoryName == label)
-                }
-            }
-        }
-
-        visible.forEach { definition ->
-            val stock = colony.inventory.amountFor(definition.id)
-            val unitPrice = buyPrice(definition.id)
-            val reserveShortfall = (colony.tradeReserve - stock).coerceAtLeast(0.0)
-            val canBuyAny = enabled && cargoRemaining >= 1.0 && state.company.cash + .0001 >= unitPrice
-            MineItPanel {
-                MineItSectionHeader(definition.name, definition.category.name)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                    MineItStat("STOCK", format(stock), Modifier.weight(1f))
-                    MineItStat("RESERVE", format(colony.tradeReserve), Modifier.weight(1f))
-                    MineItStat("PRICE", "£${formatMoney(unitPrice)}", Modifier.weight(1f))
-                }
-                Text(
-                    "Request ${format(amount)} • up to £${formatMoney(amount * unitPrice)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MineItPalette.Muted,
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+        MineItSectionHeader("BUY FROM CORPORATION", "${format(cargoRemaining)} CARGO")
+        Text("Choose an amount once, then tap resources to buy.", style = MaterialTheme.typography.bodySmall, color = MineItPalette.Muted)
+        TradeAmountSelector(amount, onAmount)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+            CorporateTradePresentation.buyCategories.forEach { candidate ->
+                MineItSecondaryButton(
+                    candidate.name,
+                    { onCategory(candidate.name) },
+                    Modifier.weight(1f),
+                    selected = candidate == category,
                 )
-                MineItActionRow {
-                    MineItPrimaryButton(
-                        "BUY ${format(amount)}",
-                        { onBuyResource(definition.id, amount) },
-                        Modifier.weight(1f),
-                        enabled = canBuyAny && amount >= 1.0,
-                    )
-                    MineItSecondaryButton(
-                        "TO RESERVE",
-                        { onBuyResource(definition.id, reserveShortfall) },
-                        Modifier.weight(1f),
-                        enabled = canBuyAny && reserveShortfall >= 1.0,
-                    )
-                }
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+        ) {
+            items(visible.size) { index ->
+                val row = visible[index]
+                val unitPrice = buyPrice(row.definition.id)
+                val affordable = (state.company.cash / unitPrice).coerceAtLeast(0.0)
+                val quantity = minOf(amount, cargoRemaining, affordable, CorporateTradePresentation.MAX_TRADE_AMOUNT).toInt().coerceAtLeast(0)
+                CompactTradeRow(
+                    title = row.definition.name,
+                    detail = buildString {
+                        append("${format(row.stock)} stock")
+                        if (row.reserve > 0) append(" • ${format(row.reserve)} reserve")
+                        if (row.reserveShortfall > .0001) append(" • SHORT ${format(row.reserveShortfall)}")
+                        append(" • £${formatMoney(unitPrice)}/u")
+                    },
+                    action = if (quantity > 0) "BUY ${format(quantity.toDouble())}\n£${formatMoney(quantity * unitPrice)}" else "BUY",
+                    enabled = enabled && quantity > 0,
+                    onAction = { onBuyResource(row.definition.id, amount) },
+                    secondaryAction = if (row.reserveShortfall >= 1.0) "TO RESERVE" else null,
+                    onSecondary = { onBuyResource(row.definition.id, row.reserveShortfall) },
+                )
             }
         }
         Pager(safePage, pageCount, onPage)
@@ -432,31 +430,26 @@ private fun ColonistTradeContent(
     val afterPopulation = state.activeColony.population + effective
     val foodSafe = effective <= projection.maxSafeTransfer
 
-    Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
-        MineItPanel {
-            MineItSectionHeader("TRANSFER COLONISTS", "PAX ${projection.passengerRemaining}")
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-                MineItSecondaryButton("-10", { onSelected(effective - 10) }, Modifier.weight(1f), enabled = effective > 0)
-                MineItSecondaryButton("-1", { onSelected(effective - 1) }, Modifier.weight(1f), enabled = effective > 0)
-                MineItStat("SELECTED", effective.toString(), Modifier.weight(1f))
-                MineItSecondaryButton("+1", { onSelected(effective + 1) }, Modifier.weight(1f), enabled = effective < projection.maxTransfer)
-                MineItSecondaryButton("+10", { onSelected(effective + 10) }, Modifier.weight(1f), enabled = effective < projection.maxTransfer)
-            }
-            MineItSecondaryButton(
-                "MAX SAFE ${projection.maxSafeTransfer}",
-                { onSelected(projection.maxSafeTransfer) },
-                Modifier.fillMaxWidth(),
-                enabled = projection.maxSafeTransfer > 0,
-            )
+    Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+        MineItSectionHeader("TRANSFER COLONISTS", "PAX ${projection.passengerRemaining}")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs), verticalAlignment = Alignment.CenterVertically) {
+            MineItSecondaryButton("-10", { onSelected(effective - 10) }, Modifier.weight(1f), enabled = effective > 0)
+            MineItSecondaryButton("-1", { onSelected(effective - 1) }, Modifier.weight(1f), enabled = effective > 0)
+            MineItStat("SELECTED", effective.toString(), Modifier.weight(1.3f))
+            MineItSecondaryButton("+1", { onSelected(effective + 1) }, Modifier.weight(1f), enabled = effective < projection.maxTransfer)
+            MineItSecondaryButton("+10", { onSelected(effective + 10) }, Modifier.weight(1f), enabled = effective < projection.maxTransfer)
         }
-
-        MineItPanel {
+        MineItSecondaryButton(
+            "MAX SAFE ${projection.maxSafeTransfer}",
+            { onSelected(projection.maxSafeTransfer) },
+            Modifier.fillMaxWidth(),
+            enabled = projection.maxSafeTransfer > 0,
+        )
+        MineItPanel(modifier = Modifier.fillMaxWidth().weight(1f)) {
             MineItSectionHeader("TRANSFER PROJECTION")
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
                 MineItStat("COST", "£${formatMoney(cost)}", Modifier.weight(1f))
                 MineItStat("POP AFTER", format(afterPopulation), Modifier.weight(1f))
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
                 MineItStat("MAX SAFE", projection.maxSafeTransfer.toString(), Modifier.weight(1f), if (foodSafe) MineItPalette.Success else MineItPalette.Warning)
                 MineItStat("HARD MAX", projection.maxTransfer.toString(), Modifier.weight(1f))
             }
@@ -466,43 +459,67 @@ private fun ColonistTradeContent(
                 color = if (foodSafe) MineItPalette.Muted else MineItPalette.Warning,
             )
             Text(
-                "Food is a MAX SAFE guide; Housing/Power, passenger capacity, company cash and Spaceport services are hard limits.",
+                "Food is a MAX SAFE guide. Housing/Power, passenger capacity, company cash and powered Spaceport services remain hard limits.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MineItPalette.Muted,
             )
-            MineItPrimaryButton(
-                "TRANSFER $effective COLONISTS",
-                { onTransfer(effective) },
-                Modifier.fillMaxWidth(),
-                enabled = enabled && effective > 0 && effective <= projection.maxTransfer && state.company.cash + .0001 >= cost,
-            )
+        }
+        MineItPrimaryButton(
+            "TRANSFER $effective COLONISTS",
+            { onTransfer(effective) },
+            Modifier.fillMaxWidth(),
+            enabled = enabled && effective > 0 && effective <= projection.maxTransfer && state.company.cash + .0001 >= cost,
+        )
+    }
+}
+
+@Composable
+private fun CompactTradeRow(
+    title: String,
+    detail: String,
+    action: String,
+    enabled: Boolean,
+    onAction: () -> Unit,
+    secondaryAction: String? = null,
+    onSecondary: () -> Unit = {},
+) {
+    MineItPanel(modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MineItPalette.Muted)
+            }
+            if (secondaryAction != null) MineItSecondaryButton(secondaryAction, onSecondary, enabled = enabled)
+            MineItPrimaryButton(action, onAction, enabled = enabled)
         }
     }
 }
 
 @Composable
-private fun TradeAmountSelector(amount: Double, maxAmount: Double, onAmount: (Double) -> Unit) {
+private fun TradeAmountSelector(amount: Double, onAmount: (Double) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-            MineItSecondaryButton("-1K", { onAmount((amount - 1_000.0).coerceAtLeast(0.0)) }, Modifier.weight(1f), enabled = amount > 0.0)
-            MineItStat("AMOUNT", format(amount), Modifier.weight(1.2f))
-            MineItSecondaryButton("+1K", { onAmount(amount + 1_000.0) }, Modifier.weight(1f))
+            MineItSecondaryButton("−", { onAmount((amount - 1_000.0).coerceAtLeast(0.0)) }, Modifier.weight(1f), enabled = amount > 0.0)
+            MineItStat("AMOUNT", format(amount), Modifier.weight(2.2f))
+            MineItSecondaryButton("+", { onAmount((amount + 1_000.0).coerceAtMost(CorporateTradePresentation.MAX_TRADE_AMOUNT)) }, Modifier.weight(1f))
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-            listOf(100.0 to "100", 1_000.0 to "1K", 10_000.0 to "10K").forEach { (value, label) ->
+            listOf(100.0 to "100", 1_000.0 to "1K", 10_000.0 to "10K", CorporateTradePresentation.MAX_TRADE_AMOUNT to "MAX").forEach { (value, label) ->
                 MineItSecondaryButton(label, { onAmount(value) }, Modifier.weight(1f), selected = amount == value)
             }
-            MineItSecondaryButton("MAX", { onAmount(maxAmount.coerceAtLeast(0.0)) }, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
 private fun Pager(page: Int, pageCount: Int, onPage: (Int) -> Unit) {
-    if (pageCount <= 1) return
-    MineItActionRow {
-        MineItSecondaryButton("PREV", { onPage(page - 1) }, Modifier.weight(1f), enabled = page > 0)
-        MineItStat("PAGE", "${page + 1}/$pageCount", Modifier.weight(1f))
-        MineItSecondaryButton("NEXT", { onPage(page + 1) }, Modifier.weight(1f), enabled = page + 1 < pageCount)
+    if (pageCount <= 1) {
+        Text("1 / 1", style = MaterialTheme.typography.bodySmall, color = MineItPalette.Muted)
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+        MineItSecondaryButton("‹", { onPage(page - 1) }, enabled = page > 0)
+        Text("${page + 1} / $pageCount", style = MaterialTheme.typography.bodySmall, color = MineItPalette.Muted)
+        MineItSecondaryButton("›", { onPage(page + 1) }, enabled = page + 1 < pageCount)
     }
 }
