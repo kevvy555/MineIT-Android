@@ -1,10 +1,15 @@
 # Phase 7 — Single-Colony Gameplay and UI Parity Closure
 
-**Status:** Planned / approved direction  
+**Status:** In progress — warning/attention and surveying/scanning slices implemented and CI-green; device validation pending  
 **Created:** 5 September 2026  
+**Started:** 5 September 2026  
+**Android branch:** `feature/migration-phase-7`  
 **Predecessor:** Phase 6 commercial/N05 implementation and device refinement  
-**Source reference:** current `kevvy555/MineIT` `develop` at the active migration baseline  
-**Target:** `kevvy555/MineIT-Android`
+**Source reference:** current `kevvy555/MineIT` `develop` at `075b3d82fd88334b20b3cfe7d6e2731c8d840533` / game `5.13.22` / web save `16`  
+**Source warning-correction branch:** `feature/android-parity-warning-fixes` at `25d3f02f114f6cdc92534f3190554351073bc946` / game `5.13.23`  
+**Target:** `kevvy555/MineIT-Android`  
+**Current validation build:** `0.7.3-migration` / version code `15`  
+**Native save format:** `6`
 
 ## Purpose
 
@@ -33,31 +38,109 @@ For **every player-facing slice**:
 
 The target is not pixel-for-pixel DOM duplication. A player who knows the web game should, however, immediately recognise the same feature and understand the same workflow.
 
+## Implementation progress
+
+### Warning/attention checkpoint — implemented / CI-green
+
+The first Phase 7 slice audited the maintained web attention system rather than simply copying native status text.
+
+Source behavior confirmed:
+
+- persistent prioritised `attention-strip` with good/warn/bad severity and direct action target;
+- critical Food/Fuel/ship-Food survival modal;
+- colony Food and Fuel critical at 10 days or less;
+- occupied-ship Food critical below 10 days;
+- one modal per continuous critical episode, resetting after recovery;
+- ship Food warning has priority over colony Food because ship and colony inventories are separate.
+
+A real maintained-web N05 defect was found and fixed on `feature/android-parity-warning-fixes`:
+
+- Housing-near-capacity incorrectly used total colony population and therefore counted residents still aboard the founding ship against planetary Housing;
+- source commit `25d3f02f114f6cdc92534f3190554351073bc946` changes both warning ratio and free-space copy to use planetary residents;
+- source game version bumped to `5.13.23` on that correction branch;
+- source CI run `33945700891` / run `1356` passed.
+
+Native implementation:
+
+- `ColonyAttentionPolicy` owns typed priority/threshold semantics outside Compose;
+- `CriticalResourceEpisodeTracker` owns one-alert-per-critical-episode behavior;
+- persistent native attention strip mirrors source severity/title/detail/action hierarchy;
+- critical resource dialog mirrors the source Food/Fuel/ship-Food hierarchy and inventory-separation warning;
+- the clock pauses for an active critical alert and cannot resume until acknowledgement;
+- attention actions route to the affected resource/system where that native destination exists;
+- N05 Housing semantics use planetary residents only;
+- POWER, INDUSTRY and HOUSING map focuses were added for direct warning navigation.
+
+Implementation commits:
+
+- `c19bd0dc7427b8d59d7ce8795a7a1755b03d171f` — typed attention policy and regression tests;
+- `9987e43ab7c15cc77482e394dedc85656c34cfa1` — attention strip, critical warning UI and application wiring.
+
+Android CI run `33946047112` / run `297` passed unit/regression tests, debug APK assembly, persistent development signer verification and artifact upload.
+
+Remaining warning cleanup before Phase 7 acceptance:
+
+- player-ship warning target will open the proper ship panel after slice 7.4 instead of using establishment as the temporary destination;
+- audit the map `PROBLEMS` Housing calculation for the same N05 planetary-resident rule;
+- prevent a critical-resource modal from competing with an already-open blocking corporate event;
+- re-check begin-establishment speed behavior when a critical alert is simultaneously entered;
+- physical-device threshold/clear/re-entry/navigation checks.
+
+### Surveying/scanning checkpoint — implemented / CI-green
+
+The current web survey interaction/domain were compared against native before changes. The native domain already matched most core rules, including scanning levels/slots, queue ordering, deterministic discovery, 50% resurvey time, same-level no-reroll behavior and center-tile exemption. The main drift was interaction/presentation.
+
+Native parity changes now include:
+
+- tapping a currently surveyable sector immediately queues it, matching current web routine play;
+- drag selection begins after normal drag slop rather than requiring a long press;
+- a drag must begin on a surveyable tile and only surveyable tiles join the drag selection;
+- the selected drag set is automatically queued on release;
+- active unsurveyed tiles show `SCANNING` plus remaining days;
+- queued unsurveyed tiles show `QUEUED`;
+- a compact scan HUD shows scanning technology level, active/slot count, queued count, lead task, remaining days and progress;
+- older completed scans show the source-style yellow `?` resurvey opportunity when `lastScannedAtLevel < currentScanningLevel`;
+- the resurvey marker is derived only from scan history/technology and never leaks hidden resource truth;
+- resurvey state remains visible over a developed/resource tile rather than replacing its primary tile identity;
+- accessibility copy distinguishes survey, queued survey, resurvey and queued resurvey.
+
+Implementation commit:
+
+- `974f616f81cf65c07bdcddfb3f931f889e33bc4c` — survey map interaction/presentation parity and regression coverage.
+
+Android CI run `33946302610` / run `298` passed unit/regression tests, debug APK assembly, persistent development signer verification and artifact upload.
+
+Device checks still required:
+
+- tap unknown tile queues exactly once;
+- drag several unknown tiles without a long hold and verify auto-queue on release;
+- scan HUD remains readable on the target phone and progress advances correctly;
+- after a Scanning Technology increase, older scanned tiles visibly show yellow resurvey `?` without leaking whether a hidden deposit exists;
+- tapping/dragging a resurvey candidate uses the expected shorter resurvey duration;
+- center Spaceport/founding-ship sector never becomes resurveyable.
+
 ## Scope and implementation order
 
-### 7.1 Surveying and scanning parity — first priority
+### 7.1 Surveying and scanning parity — implemented / device validation pending
 
-Surveying is one of the most frequent game interactions and must be brought close to current web behaviour before broader expansion.
+Surveying is one of the most frequent game interactions and must be close to current web behavior before broader expansion.
 
-Review and migrate together:
+Parity scope includes:
 
 - scan/survey slot count and active/queued state;
 - single-tile scan interaction;
-- hold/drag or equivalent multi-selection interaction;
-- multi-select queueing;
+- drag multi-selection and auto-queueing;
 - scan progress presentation;
 - active vs queued distinction;
-- resurvey/history behaviour;
+- resurvey/history behavior;
 - scanning technology effects;
 - sector naming and selected-sector context;
 - map visual state for unknown, queued, active, complete and resurveyable sectors;
-- queue limits/order and disabled reasons;
+- queue order/disabled reasons;
 - current web scanning HUD/status information;
-- relevant touch/mobile behaviour.
+- touch/mobile behavior.
 
-Minor Android refinements are allowed, but the normal player workflow and information density should remain recognisable.
-
-### 7.2 Building and extraction information panels
+### 7.2 Building and extraction information panels — next implementation slice
 
 Bring the native building/site detail experience up to current `adaptive-building` parity.
 
@@ -84,7 +167,7 @@ The panel should explain *why* a facility is underperforming rather than only ex
 
 ### 7.3 Headquarters and Colony Control completion
 
-The improved Phase 6 Colony Control hierarchy remains the foundation, but the single-colony flow must be completed and checked against current web Headquarters behaviour.
+The improved Phase 6 Colony Control hierarchy remains the foundation, but the single-colony flow must be completed and checked against current web Headquarters behavior.
 
 Review:
 
@@ -109,7 +192,7 @@ Do not add dead buttons for later-phase services.
 
 Complete the single-colony docked-ship control surface without prematurely implementing full interstellar expansion.
 
-Required information/actions include, where supported by current source behaviour:
+Required information/actions include, where supported by current source behavior:
 
 - ship identity/class/status/location;
 - docked/landed state;
@@ -136,15 +219,15 @@ The Corporate Ship should feel like an arriving ship/event, not merely a generic
 Review and mirror the current web quick-trade flow:
 
 - Corporate Ship identity/arrival context;
-- blocking/docked state and pause behaviour;
+- blocking/docked state and pause behavior;
 - Cash, Import, Export and Passenger capacity summary;
 - Sell / Buy / Colonists modes;
 - resource category filtering and paging;
 - stock, quality and price visibility;
-- colony reserve behaviour and shortfall actions;
+- colony reserve behavior and shortfall actions;
 - buy quantities and costs;
 - sell quantities and revenue;
-- quality-aware sale behaviour;
+- quality-aware sale behavior;
 - colonist transfer projections and hard/safe limits;
 - explicit `SHIP DEPARTS` action;
 - post-departure state and event logging.
@@ -225,75 +308,11 @@ Complete the Spaceport as a coherent single-colony service surface:
 - transfer availability/reasons;
 - links to ship/trade functions that actually exist.
 
-### 7.10 Colony warnings, attention system and bug cleanup
+### 7.10 Colony warnings, attention system and bug cleanup — implementation checkpoint complete / cleanup + device validation pending
 
-Warnings are gameplay guidance, not decoration. This slice must be audited against current web behaviour **and checked for defects before porting**.
+Warnings are gameplay guidance, not decoration. The source and native behavior are recorded in the implementation-progress section above.
 
-#### Current web behaviour reviewed
-
-The web game currently has two complementary warning layers:
-
-1. a persistent, clickable `attention-strip` with good/warn/bad severity and a direct navigation/action target;
-2. a one-shot critical survival modal for colony Food, colony Fuel and occupied-ship Food when their critical runway threshold is entered.
-
-Current attention priority includes:
-
-- colony lost;
-- landing-site selection;
-- Corporate Ship docked;
-- occupied-ship Food low/critical/starvation/deaths;
-- colony Food low;
-- Power shortage;
-- colony Fuel low;
-- workforce shortage;
-- Industry overload;
-- Housing near capacity;
-- Ore low;
-- unacknowledged colony establishment;
-- stable/no-immediate-problem state.
-
-The critical survival warning currently triggers:
-
-- colony Food at 10 days or less;
-- colony Fuel at 10 days or less;
-- occupied-ship Food below 10 days;
-- once per continuous critical episode, resetting after the condition clears.
-
-The critical modal explicitly reminds the player that ship and colony inventories are separate.
-
-#### Native gap found during planning audit
-
-The current native surface does **not** yet provide equivalent semantics:
-
-- `statusMessage` is a transient generic strip rather than an authoritative prioritised attention state;
-- severity is inferred from message text instead of an explicit warning model;
-- there is no source-equivalent critical survival modal/episode guard;
-- Housing has no near-capacity HUD warning tone;
-- occupied-ship Food runway is displayed but does not yet reproduce the source 30-day attention / under-10-day critical treatment;
-- native HUD Power/Industry colouring currently uses simplified thresholds and must be compared against source warning meaning rather than assumed equivalent;
-- warning actions do not yet consistently navigate directly to the affected resource/system.
-
-These are Phase 7 work items, not reasons to move gameplay rules into Compose.
-
-#### Source bug identified during planning audit
-
-Current web `attentionStatus()` calculates **Housing near capacity using total colony population (`s.pop`) rather than planetary residents**. Under N05, residents still accommodated aboard the founding ship must not consume planetary Housing. This can therefore produce a false Housing warning during establishment.
-
-Before native warning parity is finalised:
-
-1. reproduce this condition in a source regression test;
-2. correct the maintained web canonical warning to use planetary resident count;
-3. verify displayed free spaces use the same planetary value;
-4. port the corrected semantic rule to native;
-5. add native regression/presentation coverage.
-
-The broader warning audit must similarly check thresholds, priority, clear/re-enter behaviour, save/reload behaviour, stale warnings after recovery, duplicate warnings and navigation targets. Any clear source bug should be corrected in the canonical source first where practical, then migrated.
-
-#### Warning architecture direction
-
-Native should expose a small typed/domain-or-application-derived attention model, for example severity/title/detail/action plus critical-episode state where persistence is genuinely required. Compose should render that model and dispatch its action; it should not derive survival rules from text.
-
-Do not over-engineer a generic notification framework. KISS applies.
+Before Phase 7 acceptance, finish the remaining cross-slice warning navigation/competition cleanup and device checks; do not move warning semantics into Compose.
 
 ### 7.11 Contract, corporation and Game Log parity sweep
 
@@ -304,7 +323,7 @@ Check:
 - Contract 01 objective/progress hierarchy;
 - deadline, extension, holdover, failure and renewal decisions;
 - company cash/reputation context;
-- event pause/resume behaviour;
+- event pause/resume behavior;
 - Game Log density/readability/date/type/message ordering;
 - direct navigation between relevant single-colony surfaces.
 
@@ -326,7 +345,7 @@ Validate the complete game rather than isolated screens:
 - HQ outage/recovery;
 - colony death/game-over;
 - save/reload while normal, paused and inside recoverable durable event states;
-- Android Back/dialog behaviour.
+- Android Back/dialog behavior.
 
 ## Out of scope for Phase 7
 
@@ -357,7 +376,7 @@ A physical-device acceptance run must demonstrate a coherent one-colony game:
 
 1. start a fresh Contract 01;
 2. select a landing site and complete/acknowledge founding handover;
-3. survey individual and multiple sectors, including queue/progress behaviour;
+3. survey individual and multiple sectors, including queue/progress behavior;
 4. inspect discovered resources and built facilities through rich detail panels;
 5. build and upgrade Power/Housing/Industry/extraction facilities with understandable requirements;
 6. use Technology/Scanning progression required by those upgrades;
@@ -381,7 +400,7 @@ A slice is done only when:
 - source domain/tests inspected;
 - preserve/refine/replace decision understood;
 - native semantic owner identified;
-- missing canonical behaviour implemented in domain/application code;
+- missing canonical behavior implemented in domain/application code;
 - Compose mirrors the recognisable source hierarchy/workflow;
 - no gameplay truth is duplicated in presentation;
 - bug fixes have regression coverage where practical;
