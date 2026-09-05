@@ -38,6 +38,9 @@ import com.mineit.android.domain.colony.HeadquartersDepartureGate
 import com.mineit.android.domain.colony.SpaceportStatus
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
+import com.mineit.android.domain.model.ResourceId
+import com.mineit.android.domain.model.ShipId
+import com.mineit.android.domain.ships.FleetActionResult
 import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.domain.world.LandingSiteCandidate
@@ -52,6 +55,7 @@ import com.mineit.android.ui.game.ColonyAttentionStrip
 import com.mineit.android.ui.game.ColonyDetailSheet
 import com.mineit.android.ui.game.GameHeader
 import com.mineit.android.ui.game.HeadquartersControlSheet
+import com.mineit.android.ui.game.PlayerShipControlSheet
 import com.mineit.android.ui.game.SectorContextBar
 import com.mineit.android.ui.map.ColonyMap
 import com.mineit.android.ui.map.MapFocus
@@ -97,6 +101,11 @@ fun MineItScreen(
     onUpgrade: () -> Unit,
     onDemolish: () -> Unit,
     onSetPrimaryHeadquarters: () -> Unit,
+    onPreviewShipResidentsAshore: (ShipId, Double) -> FleetActionResult,
+    onMoveShipResidentsAshore: (ShipId, Double, Boolean) -> Unit,
+    onMoveShipResidentsAboard: (ShipId, Double) -> Unit,
+    onUnloadShipResource: (ShipId, ResourceId, Double) -> Unit,
+    onLoadShipResource: (ShipId, ResourceId, Double) -> Unit,
     onAdvanceDay: () -> Unit,
     onSetSimulationSpeed: (Int) -> Unit,
     onOpenCommercial: () -> Unit,
@@ -106,9 +115,16 @@ fun MineItScreen(
 ) {
     var showColonyDetail by remember { mutableStateOf(false) }
     val colony = state.activeColony
-    val selectedHeadquarters = selectedTiles.singleOrNull()?.takeIf {
-        it.development?.kind == DevelopmentKind.HEADQUARTERS
-    }
+    val selectedTile = selectedTiles.singleOrNull()
+    val selectedHeadquarters = selectedTile?.takeIf { it.development?.kind == DevelopmentKind.HEADQUARTERS }
+    val selectedPlayerShip = selectedTile
+        ?.takeIf { it.coordinate.x == 0 && it.coordinate.y == 0 }
+        ?.let {
+            val docked = state.fleet.ships.filter { ship -> ship.dockedColonyId == colony.id }
+            state.fleet.selectedShipId
+                ?.let { selectedId -> docked.firstOrNull { ship -> ship.id == selectedId } }
+                ?: docked.firstOrNull()
+        }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -243,6 +259,22 @@ fun MineItScreen(
                 onDemolish()
                 onClearSelection()
             },
+            onDismiss = onClearSelection,
+        )
+    } else if (selectedPlayerShip != null) {
+        PlayerShipControlSheet(
+            state = state,
+            network = network,
+            spaceport = spaceport,
+            departureGate = departureGate,
+            ship = selectedPlayerShip,
+            statusMessage = statusMessage,
+            onOpenColonyControl = { showColonyDetail = true },
+            onPreviewResidentsAshore = { amount -> onPreviewShipResidentsAshore(selectedPlayerShip.id, amount) },
+            onMoveResidentsAshore = { amount, confirmed -> onMoveShipResidentsAshore(selectedPlayerShip.id, amount, confirmed) },
+            onMoveResidentsAboard = { amount -> onMoveShipResidentsAboard(selectedPlayerShip.id, amount) },
+            onUnload = { resourceId, amount -> onUnloadShipResource(selectedPlayerShip.id, resourceId, amount) },
+            onLoad = { resourceId, amount -> onLoadShipResource(selectedPlayerShip.id, resourceId, amount) },
             onDismiss = onClearSelection,
         )
     }
