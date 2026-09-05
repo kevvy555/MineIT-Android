@@ -51,6 +51,7 @@ import com.mineit.android.ui.design.MineItSpacing
 import com.mineit.android.ui.game.ColonyAttentionStrip
 import com.mineit.android.ui.game.ColonyDetailSheet
 import com.mineit.android.ui.game.GameHeader
+import com.mineit.android.ui.game.HeadquartersControlSheet
 import com.mineit.android.ui.game.SectorContextBar
 import com.mineit.android.ui.map.ColonyMap
 import com.mineit.android.ui.map.MapFocus
@@ -105,6 +106,9 @@ fun MineItScreen(
 ) {
     var showColonyDetail by remember { mutableStateOf(false) }
     val colony = state.activeColony
+    val selectedHeadquarters = selectedTiles.singleOrNull()?.takeIf {
+        it.development?.kind == DevelopmentKind.HEADQUARTERS
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -225,6 +229,22 @@ fun MineItScreen(
             departureGate = departureGate,
             onDismiss = { showColonyDetail = false },
         )
+    } else if (selectedHeadquarters != null) {
+        HeadquartersControlSheet(
+            state = state,
+            network = network,
+            departureGate = departureGate,
+            tile = selectedHeadquarters,
+            upgradePreview = upgradePreview,
+            statusMessage = statusMessage,
+            onSetPrimary = onSetPrimaryHeadquarters,
+            onUpgrade = onUpgrade,
+            onDemolish = {
+                onDemolish()
+                onClearSelection()
+            },
+            onDismiss = onClearSelection,
+        )
     }
 }
 
@@ -297,10 +317,7 @@ private fun FooterControls(
     onAdvanceDay: () -> Unit,
     onMainMenu: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
-    ) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
         listOf(0 to "PAUSE", 1 to "1×", 2 to "2×", 4 to "4×").forEach { (value, label) ->
             MineItSecondaryButton(
                 text = label,
@@ -318,11 +335,7 @@ private fun FooterControls(
             accent = MineItPalette.Warning,
             modifier = Modifier.weight(1.25f),
         )
-        MineItSecondaryButton(
-            text = "MENU",
-            onClick = onMainMenu,
-            modifier = Modifier.weight(1f),
-        )
+        MineItSecondaryButton("MENU", onMainMenu, modifier = Modifier.weight(1f))
     }
 }
 
