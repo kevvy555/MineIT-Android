@@ -182,6 +182,7 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                         statusMessage = statusMessage,
                         onUpgrade = viewModel::upgradeSelected,
                         onAdjustHarvest = viewModel::adjustSelectedHarvestIntensity,
+                        onSetOperatingMode = viewModel::setSelectedExtractionOperatingMode,
                         onDemolish = {
                             viewModel.demolishSelected()
                             developmentDetailCoordinate = null
