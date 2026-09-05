@@ -63,7 +63,7 @@ Unless there is a clear reason to change them, preserve:
 - map-first proportions and compactness;
 - placement of the primary action area;
 - established resource/status groupings;
-- recognisable trade, contract, buyer, colony and ship workflows;
+- recognisable scanning, trade, contract, buyer, colony, Headquarters and ship workflows;
 - familiar terminology and status meaning.
 
 ### Improve deliberately
@@ -143,6 +143,7 @@ During migration, explicitly compare presentation of the same concepts across:
 - money/prices/costs;
 - Power/workforce/Industry capacity and shortages;
 - building levels, construction, upgrades and disabled actions;
+- survey/scan queue, progress, selected and completed states;
 - ship capacity/cargo/passengers/Fuel/status;
 - contract/buyer status;
 - warnings and destructive confirmations;
@@ -152,6 +153,26 @@ During migration, explicitly compare presentation of the same concepts across:
 - number/date/percentage formatting.
 
 A concept should not acquire a different visual grammar merely because it appears in another feature.
+
+## Warning and attention consistency
+
+Warnings are gameplay guidance, not merely styling.
+
+When migrating warning/attention behaviour:
+
+- inspect current source HTML/view, CSS, controller logic and the metric/domain owners that determine the condition;
+- preserve the source severity meaning and action/navigation target unless a defect is found;
+- distinguish persistent attention state from one-shot critical interruption/modals;
+- use typed state rather than parsing or classifying message strings in Compose;
+- ensure entering, clearing and re-entering a condition works correctly;
+- check simultaneous-warning priority explicitly;
+- verify ship and colony populations/inventories are not accidentally mixed;
+- add regression coverage for any clear defect before or with the fix;
+- where practical, correct a clear maintained-web bug first and then port the corrected rule.
+
+The current Phase 7 planning audit has already identified one source defect: Housing-near-capacity warning logic uses total population instead of planetary resident count, which is incorrect while N05 residents remain aboard the founding ship. This is recorded in `PHASE_7_SINGLE_COLONY_PARITY.md` and must be regression-tested/corrected before native warning parity is accepted.
+
+Do not build a speculative generic notification framework. Use the smallest explicit attention model that cleanly represents the current game.
 
 ## Interaction principles
 
@@ -174,7 +195,7 @@ As the production design system replaces and refines migrated UI:
 - keep gameplay assertions in domain tests rather than screenshot tests;
 - compare representative native screens against the current web hierarchy during hands-on review.
 
-## Phase 5 and Phase 6 direction
+## Phase 5, Phase 6 and Phase 7 direction
 
 Phase 5 established the native design system and production map shell successfully, but subsequent device review showed that some detail/commercial presentation had drifted too far from the web layout and information hierarchy.
 
@@ -183,8 +204,11 @@ That feedback changes the migration method, not the underlying Phase 1–6 domai
 - the accepted Phase 5 map-first foundation remains valid;
 - shared tokens/primitives remain valid;
 - the current Phase 6 commercial/domain implementation remains the canonical backend;
-- Phase 6 is not accepted until its player-facing commercial surfaces and the current Colony Details presentation are reviewed against the web UI and refined toward recognisable layout parity;
-- future Portfolio, Ships, Technology, Engineering, Company and other screens are migrated as complete UI-led vertical slices with their required backend functionality;
+- Phase 6 is accepted only after its revised physical-device validation is explicitly approved;
+- the next migration phase is now **Phase 7 — Single-Colony Gameplay and UI Parity Closure**, before Portfolio/multi-colony;
+- Phase 7 applies this inspect-and-mirror method to scanning, building/extraction panels, Headquarters/Colony Control, founding/player ship, Corporate Ship trade, Buyers, required Technology/Engineering, resource detail, Spaceport, warnings and remaining single-colony closure;
+- the previous Portfolio/multi-colony phase moves to Phase 8;
+- broader fleet procurement/expansion/navigation follows after single-colony and multi-colony management foundations are coherent;
 - a later consistency phase remains, but it is a closure/audit phase rather than the first time major feature UIs are built.
 
-Detailed implementation/recovery state is recorded in `PHASE_5_NATIVE_UI.md`, `PHASE_6_CONTRACTS_TRADE_EVENTS.md` and the master `WEB_TO_ANDROID_MIGRATION.md` guide.
+Detailed implementation/recovery state is recorded in `PHASE_5_NATIVE_UI.md`, `PHASE_6_CONTRACTS_TRADE_EVENTS.md`, `PHASE_7_SINGLE_COLONY_PARITY.md` and the master `WEB_TO_ANDROID_MIGRATION.md` guide.
