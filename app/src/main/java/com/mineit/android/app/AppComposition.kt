@@ -8,6 +8,7 @@ import com.mineit.android.domain.colony.ColonyDevelopmentService
 import com.mineit.android.domain.colony.ColonyEstablishmentService
 import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.colony.ExtractionOperationService
+import com.mineit.android.domain.colony.ExtractionOverdriveDayService
 import com.mineit.android.domain.colony.HeadquartersService
 import com.mineit.android.domain.colony.PopulationSupportService
 import com.mineit.android.domain.colony.SpaceportService
@@ -44,6 +45,10 @@ class AppComposition(application: Application) {
         fleetService = playerFleetService,
     )
     val extractionOperationService = ExtractionOperationService()
+    val extractionOverdriveDayService = ExtractionOverdriveDayService(
+        fleetService = playerFleetService,
+        networkService = colonyNetworkService,
+    )
     val populationSupportService = PopulationSupportService()
     val spaceportService = SpaceportService()
     val reputationService = ReputationService()
@@ -65,6 +70,7 @@ class AppComposition(application: Application) {
         contractService = contractService,
         eventService = corporateEventService,
         gameLogService = gameLogService,
+        overdriveDayService = extractionOverdriveDayService,
     )
 
     private val initialState = createNewGame()
