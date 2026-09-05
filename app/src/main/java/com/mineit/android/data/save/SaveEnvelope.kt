@@ -4,7 +4,7 @@ import com.mineit.android.domain.model.GameState
 import kotlinx.serialization.Serializable
 
 object NativeSaveFormat {
-    const val CURRENT_VERSION = 6
+    const val CURRENT_VERSION = 7
 }
 
 @Serializable

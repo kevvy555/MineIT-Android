@@ -3,6 +3,7 @@ package com.mineit.android.domain.colony
 import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.resources.ResourceCategory
+import com.mineit.android.domain.world.ExtractionOperatingMode
 import com.mineit.android.domain.world.Sustainability
 import com.mineit.android.domain.world.WorldTile
 import kotlin.math.ceil
@@ -12,7 +13,12 @@ import kotlin.math.pow
 
 /** Shared canonical operational requirements for extraction sites. */
 object SiteOperationRules {
-    fun workforceRequirement(colony: ColonyState, tile: WorldTile, levelOverride: Int? = null): Double {
+    fun workforceRequirement(
+        colony: ColonyState,
+        tile: WorldTile,
+        levelOverride: Int? = null,
+        modeOverride: ExtractionOperatingMode? = null,
+    ): Double {
         val deposit = requireNotNull(tile.deposit) { "Extraction site requires a resource deposit." }
         val level = (levelOverride ?: tile.development?.level ?: 1).coerceAtLeast(1)
         val complexity = 1.0 + .18 * (deposit.requiredMiningLevel - 1)
@@ -33,7 +39,8 @@ object SiteOperationRules {
             ceil(
                 MineItConfig.SITE_WORKFORCE_BASE *
                     MineItConfig.SITE_WORKFORCE_GROWTH.pow(level - 1) *
-                    complexity * efficiency * intensityFactor,
+                    complexity * efficiency * intensityFactor *
+                    ExtractionOverdriveRules.workforceMultiplier(tile, modeOverride),
             ),
         )
     }

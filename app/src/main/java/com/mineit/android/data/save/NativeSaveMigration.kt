@@ -94,6 +94,13 @@ object NativeSaveV5ToV6 : NativeSaveMigration {
     }
 }
 
+/** Phase 7 adds defaulted persistent industrial-overdrive state to extraction developments. */
+object NativeSaveV6ToV7 : NativeSaveMigration {
+    override val fromVersion = 6
+    override val toVersion = 7
+    override fun migrate(input: JsonObject) = bump(input, toVersion)
+}
+
 private fun bump(input: JsonObject, version: Int): JsonObject = JsonObject(input + ("formatVersion" to JsonPrimitive(version)))
 
 class NativeSaveMigrationChain(
@@ -134,6 +141,7 @@ class NativeSaveMigrationChain(
             if (currentVersion >= 4) add(NativeSaveV3ToV4)
             if (currentVersion >= 5) add(NativeSaveV4ToV5)
             if (currentVersion >= 6) add(NativeSaveV5ToV6)
+            if (currentVersion >= 7) add(NativeSaveV6ToV7)
         }
     }
 }

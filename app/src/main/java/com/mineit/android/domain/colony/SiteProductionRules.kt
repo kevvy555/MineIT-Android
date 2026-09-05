@@ -28,11 +28,12 @@ object SiteProductionRules {
         } else {
             siteOutput(level) * finiteRateFactor(deposit.depositScale) * deposit.terrainYieldFactor
         }
-        return if (deposit.category == ResourceCategory.FOOD) {
+        val technologyAdjusted = if (deposit.category == ResourceCategory.FOOD) {
             base * TechnologyCapabilities.foodProductionMultiplier(colony.technology)
         } else {
             base
         }
+        return technologyAdjusted * ExtractionOverdriveRules.outputMultiplier(tile)
     }
 
     fun rate(
@@ -40,6 +41,7 @@ object SiteProductionRules {
         tile: WorldTile,
         network: ColonyNetworkSnapshot,
     ): Double {
+        if (ExtractionOverdriveRules.isShutdown(tile)) return 0.0
         val deposit = requireNotNull(tile.deposit) { "Extraction production requires a resource deposit." }
         val workforce = if (deposit.category in survivalCategories) {
             network.workforceSurvivalFactor

@@ -47,6 +47,31 @@ enum class DevelopmentKind {
     @SerialName("headquarters") HEADQUARTERS,
 }
 
+@Serializable
+enum class ExtractionOperatingMode {
+    @SerialName("normal") NORMAL,
+    @SerialName("pushed") PUSHED,
+    @SerialName("hard") HARD,
+}
+
+@Serializable
+enum class ExtractionAccidentOutcome {
+    @SerialName("machinery") MACHINERY,
+    @SerialName("fatalities") FATALITIES,
+}
+
+@Serializable
+data class ExtractionAccidentRecord(
+    val name: String,
+    val family: String,
+    val outcome: ExtractionAccidentOutcome,
+    val deaths: Int,
+    val shutdownDays: Int,
+    val mode: ExtractionOperatingMode,
+    val year: Int,
+    val day: Int,
+)
+
 /** Permanent physical development state shared by construction and simulation. */
 @Serializable
 data class TileDevelopment(
@@ -56,11 +81,19 @@ data class TileDevelopment(
     val constructionComplete: Boolean = true,
     val investedBuild: Double = 0.0,
     val investedOre: Double = 0.0,
+    val operatingMode: ExtractionOperatingMode = ExtractionOperatingMode.NORMAL,
+    val overdriveExposure: Double = 0.0,
+    val overdriveRiskChecks: Int = 0,
+    val accidentShutdownDays: Int = 0,
+    val lastAccident: ExtractionAccidentRecord? = null,
 ) {
     init {
         require(level in 1..5) { "Tile development level must be between 1 and 5." }
         require(investedBuild.isFinite() && investedBuild >= 0.0) { "Invested Build must be non-negative." }
         require(investedOre.isFinite() && investedOre >= 0.0) { "Invested Ore must be non-negative." }
+        require(overdriveExposure.isFinite() && overdriveExposure >= 0.0) { "Overdrive exposure must be finite and non-negative." }
+        require(overdriveRiskChecks >= 0) { "Overdrive risk checks must not be negative." }
+        require(accidentShutdownDays >= 0) { "Accident shutdown days must not be negative." }
     }
 }
 
