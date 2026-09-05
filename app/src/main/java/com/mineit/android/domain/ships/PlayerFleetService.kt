@@ -8,11 +8,12 @@ import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.model.ShipId
 import com.mineit.android.domain.resources.ResourceCategory
+import kotlin.math.floor
 import kotlin.math.max
 
 /**
- * Canonical native owner for corporation fleet facts needed by colony establishment.
- * Ship procurement, travel and market behaviour extend this owner in their later slices.
+ * Canonical native owner for corporation fleet facts needed by colony establishment and the
+ * docked single-colony ship surface. Ship procurement and travel extend this owner later.
  */
 class PlayerFleetService {
     fun dockedShips(state: GameState, colonyId: ColonyId = state.activeColonyId): List<PlayerShipState> =
@@ -31,11 +32,39 @@ class PlayerFleetService {
         return max(0.0, colony.population - totalShipResidents(colony))
     }
 
+    fun homelessResidentCount(state: GameState, colonyId: ColonyId = state.activeColonyId): Double {
+        val colony = state.colonies.first { it.id == colonyId }
+        return max(0.0, planetaryResidentCount(state, colonyId) - colony.planetaryAccommodationResidents)
+    }
+
     fun hasCommandShip(state: GameState, colonyId: ColonyId = state.activeColonyId): Boolean =
         dockedShips(state, colonyId).any { it.commandCapable }
 
     fun industrySupport(state: GameState, colonyId: ColonyId = state.activeColonyId): Double =
         dockedShips(state, colonyId).sumOf { it.industrySupport }
+
+    fun generalCargoLoad(ship: PlayerShipState): Double =
+        ship.inventory.amountFor(ResourceCategory.BUILD) + ship.inventory.amountFor(ResourceCategory.ORE)
+
+    fun foodLoad(ship: PlayerShipState): Double = ship.inventory.amountFor(ResourceCategory.FOOD)
+    fun fuelLoad(ship: PlayerShipState): Double = ship.inventory.amountFor(ResourceCategory.FUEL)
+    fun totalPhysicalLoad(ship: PlayerShipState): Double = generalCargoLoad(ship) + foodLoad(ship) + fuelLoad(ship)
+    fun totalPhysicalCapacity(ship: PlayerShipState): Double = ship.cargoCapacity + ship.foodCapacity + ship.fuelCapacity
+
+    fun loadForCategory(ship: PlayerShipState, category: ResourceCategory): Double = when (category) {
+        ResourceCategory.FOOD -> foodLoad(ship)
+        ResourceCategory.FUEL -> fuelLoad(ship)
+        ResourceCategory.BUILD, ResourceCategory.ORE -> generalCargoLoad(ship)
+    }
+
+    fun capacityForCategory(ship: PlayerShipState, category: ResourceCategory): Double = when (category) {
+        ResourceCategory.FOOD -> ship.foodCapacity
+        ResourceCategory.FUEL -> ship.fuelCapacity
+        ResourceCategory.BUILD, ResourceCategory.ORE -> ship.cargoCapacity
+    }
+
+    fun remainingCapacityForCategory(ship: PlayerShipState, category: ResourceCategory): Double =
+        max(0.0, capacityForCategory(ship, category) - loadForCategory(ship, category))
 
     fun residentFoodStatus(state: GameState): ShipResidentFoodStatus {
         val colony = state.activeColony
@@ -113,7 +142,7 @@ class PlayerFleetService {
             ?: return FleetActionResult(false, state, "No colony residents are accommodated aboard that ship.", 0.0)
         val freeHousing = max(0.0, housingCapacity - colony.planetaryAccommodationResidents)
         val normalized = requested.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
-        val moved = minOf(assignment.residents, freeHousing, kotlin.math.floor(normalized))
+        val moved = minOf(assignment.residents, freeHousing, floor(normalized))
         if (moved <= .0001) {
             val reason = if (freeHousing <= .0001) "No planetary accommodation is available." else "Resident transfer amount must be positive."
             return FleetActionResult(false, state, reason, 0.0)
@@ -157,6 +186,53 @@ class PlayerFleetService {
             amount = moved,
             projectedDemand = projectedDemand,
             availableGeneration = availableGeneration,
+        )
+    }
+
+    /** Web-parity inverse of [moveResidentsAshore]: homeless residents are boarded first. */
+    fun moveResidentsAboard(
+        state: GameState,
+        shipId: ShipId,
+        requested: Double,
+        spaceportServicesAvailable: Boolean,
+    ): FleetActionResult {
+        val colony = state.activeColony
+        val ship = state.fleet.ships.firstOrNull { it.id == shipId }
+            ?: return FleetActionResult(false, state, "Ship not found.", 0.0)
+        if (ship.dockedColonyId != colony.id) {
+            return FleetActionResult(false, state, "The selected player ship is not docked at this colony.", 0.0)
+        }
+        if (!spaceportServicesAvailable) {
+            return FleetActionResult(false, state, "Powered Spaceport services are required to move residents aboard.", 0.0)
+        }
+        val aboard = shipResidentCount(colony, shipId)
+        val room = max(0.0, ship.accommodationCapacity - aboard)
+        val ashore = planetaryResidentCount(state, colony.id)
+        val normalized = requested.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        val moved = minOf(room, ashore, floor(normalized))
+        if (moved <= .0001) {
+            val reason = when {
+                room <= .0001 -> "Ship accommodation is full."
+                ashore <= .0001 -> "No colony residents can be moved aboard."
+                else -> "Resident transfer amount must be positive."
+            }
+            return FleetActionResult(false, state, reason, 0.0)
+        }
+
+        val homelessBefore = homelessResidentCount(state, colony.id)
+        val movedFromPlanetaryHousing = max(0.0, moved - minOf(moved, homelessBefore))
+        val nextAssignments = colony.shipResidentAssignments
+            .filterNot { it.shipId == shipId }
+            .plus(ShipResidentAssignment(shipId, aboard + moved))
+        val updatedColony = colony.copy(
+            shipResidentAssignments = nextAssignments,
+            planetaryAccommodationResidents = max(0.0, colony.planetaryAccommodationResidents - movedFromPlanetaryHousing),
+        )
+        return FleetActionResult(
+            ok = true,
+            state = state.copy(colonies = state.colonies.map { if (it.id == colony.id) updatedColony else it }),
+            message = "Moved ${moved.toInt()} residents aboard ${ship.name}.",
+            amount = moved,
         )
     }
 
@@ -205,18 +281,33 @@ class PlayerFleetService {
         if (!spaceportServicesAvailable) {
             return FleetActionResult(false, state, "Powered Spaceport services are required for loading.", 0.0)
         }
-        val withdrawal = colony.inventory.withdraw(resourceId, requested)
+        val source = colony.inventory.find(resourceId)
+            ?: return FleetActionResult(false, state, "No requested colony stock is available.", 0.0)
+        val normalized = requested.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0
+        if (normalized <= .0001) return FleetActionResult(false, state, "Ship loading amount must be positive.", 0.0)
+        val remainingCapacity = remainingCapacityForCategory(ship, source.category)
+        if (remainingCapacity <= .0001) {
+            val label = when (source.category) {
+                ResourceCategory.FOOD -> "Food store"
+                ResourceCategory.FUEL -> "Fuel tank"
+                ResourceCategory.BUILD, ResourceCategory.ORE -> "general cargo hold"
+            }
+            return FleetActionResult(false, state, "Ship $label is full.", 0.0)
+        }
+        val allowed = minOf(normalized, source.amount, remainingCapacity)
+        val withdrawal = colony.inventory.withdraw(resourceId, allowed)
         val moved = withdrawal.stock?.amount ?: 0.0
         if (moved <= .0001) return FleetActionResult(false, state, "No requested colony stock is available.", 0.0)
         val updatedShip = ship.copy(inventory = ship.inventory.store(requireNotNull(withdrawal.stock)))
         val updatedColony = colony.copy(inventory = withdrawal.inventory)
+        val clippedByCapacity = moved + .0001 < minOf(normalized, source.amount)
         return FleetActionResult(
             ok = true,
             state = state.copy(
                 fleet = state.fleet.copy(ships = state.fleet.ships.map { if (it.id == shipId) updatedShip else it }),
                 colonies = state.colonies.map { if (it.id == colony.id) updatedColony else it },
             ),
-            message = "Ship loading complete.",
+            message = if (clippedByCapacity) "Loaded ${moved.toInt()} units; ship storage capacity reached." else "Ship loading complete.",
             amount = moved,
         )
     }
