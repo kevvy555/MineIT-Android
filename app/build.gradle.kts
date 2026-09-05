@@ -14,8 +14,8 @@ android {
         applicationId = "com.mineit.android"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.7.3-migration"
+        versionCode = 16
+        versionName = "0.7.4-migration"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
