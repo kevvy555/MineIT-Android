@@ -2,11 +2,14 @@ package com.mineit.android.domain.ships
 
 import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.config.MineItConfig
+import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.model.ColonyStatus
+import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.NewGameFactory
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.simulation.DailySimulationEngine
+import com.mineit.android.testing.EstablishedColonyFixture
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -107,5 +110,118 @@ class ShipEstablishmentParityTest {
         )
         assertFalse(reverse.ok)
         assertEquals(unloaded.state, reverse.state)
+    }
+
+    @Test
+    fun `moving residents back aboard uses homeless residents before vacating planetary Housing`() {
+        var state = EstablishedColonyFixture.contract01(colonySeed = 47L)
+        val ship = state.fleet.ships.single()
+        state = state.withActiveColony { colony ->
+            colony.copy(planetaryAccommodationResidents = 60.0)
+        }
+
+        val moved = fleetService.moveResidentsAboard(
+            state = state,
+            shipId = ship.id,
+            requested = 80.0,
+            spaceportServicesAvailable = true,
+        )
+
+        assertTrue(moved.message, moved.ok)
+        assertEquals(80.0, moved.amount, 0.0)
+        assertEquals(80.0, fleetService.shipResidentCount(moved.state.activeColony, ship.id), 0.0)
+        assertEquals(40.0, fleetService.planetaryResidentCount(moved.state), 0.0)
+        assertEquals(40.0, moved.state.activeColony.planetaryAccommodationResidents, 0.0)
+        assertEquals(0.0, fleetService.homelessResidentCount(moved.state), 0.0)
+    }
+
+    @Test
+    fun `moving residents aboard is Spaceport gated and bounded by ship accommodation`() {
+        var state = EstablishedColonyFixture.contract01(colonySeed = 48L)
+        val ship = state.fleet.ships.single().copy(accommodationCapacity = 50)
+        state = state.copy(fleet = state.fleet.copy(ships = listOf(ship)))
+
+        val blocked = fleetService.moveResidentsAboard(
+            state = state,
+            shipId = ship.id,
+            requested = 100.0,
+            spaceportServicesAvailable = false,
+        )
+        assertFalse(blocked.ok)
+        assertTrue(blocked.message.contains("Spaceport"))
+
+        val moved = fleetService.moveResidentsAboard(
+            state = state,
+            shipId = ship.id,
+            requested = 100.0,
+            spaceportServicesAvailable = true,
+        )
+        assertTrue(moved.ok)
+        assertEquals(50.0, moved.amount, 0.0)
+        assertEquals(50.0, fleetService.shipResidentCount(moved.state.activeColony, ship.id), 0.0)
+    }
+
+    @Test
+    fun `loading enforces separate general cargo Food and Fuel capacities`() {
+        var state = EstablishedColonyFixture.contract01(colonySeed = 49L)
+        val ship = state.fleet.ships.single()
+        state = state.withActiveColony { colony ->
+            colony.copy(
+                inventory = colony.inventory
+                    .store(ResourceId("fiber"), ResourceCategory.BUILD, 10_000.0, 500)
+                    .store(ResourceId("fungal"), ResourceCategory.FOOD, 3_000.0, 500)
+                    .store(ResourceId("biomass"), ResourceCategory.FUEL, 3_000.0, 500),
+            )
+        }
+
+        val cargo = fleetService.transferFromColonyToShip(
+            state = state,
+            shipId = ship.id,
+            resourceId = ResourceId("fiber"),
+            requested = 10_000.0,
+            spaceportServicesAvailable = true,
+        )
+        assertTrue(cargo.ok)
+        assertEquals(ship.cargoCapacity, cargo.amount, 0.0)
+        assertEquals(ship.cargoCapacity, fleetService.generalCargoLoad(cargo.state.fleet.ships.single()), 0.0)
+        assertTrue(cargo.message.contains("capacity"))
+
+        val cargoFull = fleetService.transferFromColonyToShip(
+            state = cargo.state,
+            shipId = ship.id,
+            resourceId = ResourceId("surface-iron"),
+            requested = 1.0,
+            spaceportServicesAvailable = true,
+        )
+        assertFalse(cargoFull.ok)
+        assertTrue(cargoFull.message.contains("cargo hold"))
+
+        val food = fleetService.transferFromColonyToShip(
+            state = cargo.state,
+            shipId = ship.id,
+            resourceId = ResourceId("fungal"),
+            requested = 3_000.0,
+            spaceportServicesAvailable = true,
+        )
+        assertTrue(food.ok)
+        assertEquals(ship.foodCapacity, food.amount, 0.0)
+        assertEquals(ship.foodCapacity, fleetService.foodLoad(food.state.fleet.ships.single()), 0.0)
+
+        val fuel = fleetService.transferFromColonyToShip(
+            state = food.state,
+            shipId = ship.id,
+            resourceId = ResourceId("biomass"),
+            requested = 3_000.0,
+            spaceportServicesAvailable = true,
+        )
+        assertTrue(fuel.ok)
+        assertEquals(ship.fuelCapacity, fuel.amount, 0.0)
+        assertEquals(ship.fuelCapacity, fleetService.fuelLoad(fuel.state.fleet.ships.single()), 0.0)
+        assertEquals(ship.cargoCapacity + ship.foodCapacity + ship.fuelCapacity, fleetService.totalPhysicalLoad(fuel.state.fleet.ships.single()), 0.0)
+    }
+
+    private fun GameState.withActiveColony(transform: (ColonyState) -> ColonyState): GameState {
+        val updated = transform(activeColony)
+        return copy(colonies = colonies.map { if (it.id == updated.id) updated else it })
     }
 }
