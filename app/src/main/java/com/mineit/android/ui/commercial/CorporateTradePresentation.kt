@@ -1,5 +1,6 @@
 package com.mineit.android.ui.commercial
 
+import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.ResourceCatalogue
@@ -20,7 +21,8 @@ object CorporateTradePresentation {
     )
 
     fun colonistsAvailable(state: GameState): Boolean =
-        state.activeColony.contract?.ended != true && state.activeColony.status.name != "LIABILITY" && state.activeColony.status.name != "DEAD"
+        state.activeColony.contract?.ended != true &&
+            state.activeColony.status !in setOf(ColonyStatus.LIABILITY, ColonyStatus.DEAD)
 
     fun defaultColonistAmount(projection: ColonistTransferProjection): Int =
         projection.maxSafeTransfer.coerceIn(0, projection.maxTransfer)
