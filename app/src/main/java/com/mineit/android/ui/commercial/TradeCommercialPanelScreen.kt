@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -161,7 +160,7 @@ fun TradeCommercialPanelScreen(
                         exportRemaining = exportRemaining,
                         page = sellPage,
                         onPage = { sellPage = it },
-                        onAmount = { sellAmount = it.coerceIn(0.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
+                        onAmount = { sellAmount = it.coerceIn(1.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
                         sellableAmount = sellableAmount,
                         sellQuote = sellQuote,
                         onSetReserve = onSetReserve,
@@ -179,7 +178,7 @@ fun TradeCommercialPanelScreen(
                         page = buyPage,
                         onCategory = { buyCategoryName = it; buyPage = 0 },
                         onPage = { buyPage = it },
-                        onAmount = { buyAmount = it.coerceIn(0.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
+                        onAmount = { buyAmount = it.coerceIn(1.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
                         buyPrice = buyPrice,
                         onBuyResource = onBuyResource,
                         enabled = spaceport.tradeAllowed,
@@ -198,8 +197,11 @@ fun TradeCommercialPanelScreen(
 
             MineItDestructiveButton(
                 "SHIP DEPARTS",
-                onDepartCorporateShip,
-                Modifier.fillMaxWidth(),
+                onClick = {
+                    onDepartCorporateShip()
+                    onClose()
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -499,7 +501,7 @@ private fun CompactTradeRow(
 private fun TradeAmountSelector(amount: Double, onAmount: (Double) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-            MineItSecondaryButton("−", { onAmount((amount - 1_000.0).coerceAtLeast(0.0)) }, Modifier.weight(1f), enabled = amount > 0.0)
+            MineItSecondaryButton("−", { onAmount((amount - 1_000.0).coerceAtLeast(1.0)) }, Modifier.weight(1f), enabled = amount > 1.0)
             MineItStat("AMOUNT", format(amount), Modifier.weight(2.2f))
             MineItSecondaryButton("+", { onAmount((amount + 1_000.0).coerceAtMost(CorporateTradePresentation.MAX_TRADE_AMOUNT)) }, Modifier.weight(1f))
         }
