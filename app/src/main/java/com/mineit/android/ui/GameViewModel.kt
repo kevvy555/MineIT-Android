@@ -28,6 +28,7 @@ import com.mineit.android.domain.events.CorporateEventType
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.model.ResourceId
+import com.mineit.android.domain.model.ShipId
 import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.ships.FleetActionResult
 import com.mineit.android.domain.simulation.ColonyMetrics
@@ -60,6 +61,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val extractionOperationService = composition.extractionOperationService
     private val networkService = composition.colonyNetworkService
     private val establishmentService = composition.colonyEstablishmentService
+    private val fleetService = composition.playerFleetService
     private val headquartersService = composition.headquartersService
     private val populationSupportService = composition.populationSupportService
     private val spaceportService = composition.spaceportService
@@ -327,6 +329,48 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun shipResidentTransferPreview(shipId: ShipId, amount: Double): FleetActionResult = fleetService.moveResidentsAshore(
+        state = state.value,
+        shipId = shipId,
+        requested = amount,
+        housingCapacity = developmentService.installedHousing(state.value.activeColony),
+        network = _network.value,
+        spaceportServicesAvailable = _spaceport.value.transfersAllowed,
+        confirmed = false,
+    )
+
+    fun moveShipResidentsAshore(shipId: ShipId, amount: Double, confirmed: Boolean = false) = commitFleetAction("ship-residents-ashore") { current ->
+        val network = networkService.calculate(current)
+        val services = spaceportService.status(current, network)
+        fleetService.moveResidentsAshore(
+            state = current,
+            shipId = shipId,
+            requested = amount,
+            housingCapacity = developmentService.installedHousing(current.activeColony),
+            network = network,
+            spaceportServicesAvailable = services.transfersAllowed,
+            confirmed = confirmed,
+        )
+    }
+
+    fun moveShipResidentsAboard(shipId: ShipId, amount: Double) = commitFleetAction("ship-residents-aboard") { current ->
+        val network = networkService.calculate(current)
+        val services = spaceportService.status(current, network)
+        fleetService.moveResidentsAboard(current, shipId, amount, services.transfersAllowed)
+    }
+
+    fun transferShipToColony(shipId: ShipId, resourceId: ResourceId, amount: Double) = commitFleetAction("ship-unload") { current ->
+        val network = networkService.calculate(current)
+        val services = spaceportService.status(current, network)
+        fleetService.transferFromShipToColony(current, shipId, resourceId, amount, services.transfersAllowed)
+    }
+
+    fun transferColonyToShip(shipId: ShipId, resourceId: ResourceId, amount: Double) = commitFleetAction("ship-load") { current ->
+        val network = networkService.calculate(current)
+        val services = spaceportService.status(current, network)
+        fleetService.transferFromColonyToShip(current, shipId, resourceId, amount, services.transfersAllowed)
+    }
+
     fun beginEstablishmentOperations() {
         viewModelScope.launch {
             var message = ""
@@ -459,6 +503,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val result = session.commit(reason, transition)
             refreshDerived(result.state)
             if (result.persistence is PersistenceSaveResult.Failure) _statusMessage.value = "Action applied, but the native save could not be written."
+        }
+    }
+
+    private fun commitFleetAction(reason: String, action: (GameState) -> FleetActionResult) {
+        viewModelScope.launch {
+            var applied: FleetActionResult? = null
+            val result = session.commit(reason) { current -> action(current).also { applied = it }.state }
+            refreshDerived(result.state)
+            val fleetResult = requireNotNull(applied)
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Failure && fleetResult.ok) "${fleetResult.message} Save write failed." else fleetResult.message
         }
     }
 
