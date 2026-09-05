@@ -34,6 +34,8 @@ import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.trade.ColonistTransferProjection
 import com.mineit.android.domain.trade.TradeQuote
 import com.mineit.android.domain.world.DevelopmentKind
+import com.mineit.android.domain.world.ExtractionAccidentOutcome
+import com.mineit.android.domain.world.ExtractionOperatingMode
 import com.mineit.android.domain.world.SectorCoordinate
 import com.mineit.android.ui.map.MapFocus
 import com.mineit.android.ui.map.MapStateFilter
@@ -250,6 +252,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             var applied: ExtractionOperationResult? = null
             val result = session.commit("adjust-harvest-intensity") { current ->
                 extractionOperationService.adjustHarvestIntensity(current, coordinate, deltaPercent).also { applied = it }.state
+            }
+            refreshDerived(result.state)
+            val message = requireNotNull(applied).message
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) message else "$message Save write failed."
+        }
+    }
+
+    fun setSelectedExtractionOperatingMode(mode: ExtractionOperatingMode) {
+        val coordinate = singleActionCoordinate() ?: return
+        val preview = extractionOperationService.setOperatingMode(state.value, coordinate, mode)
+        if (!preview.ok) { _statusMessage.value = preview.message; return }
+        viewModelScope.launch {
+            var applied: ExtractionOperationResult? = null
+            val result = session.commit("set-extraction-operating-mode") { current ->
+                extractionOperationService.setOperatingMode(current, coordinate, mode).also { applied = it }.state
             }
             refreshDerived(result.state)
             val message = requireNotNull(applied).message
@@ -527,6 +544,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _statusMessage.value = when {
             _criticalResourceAlert.value != null -> "Critical survival reserve requires attention."
             result.shouldPause -> "Corporate event requires attention."
+            result.extractionAccidents.isNotEmpty() -> {
+                val accident = result.extractionAccidents.first().record
+                val primary = if (accident.outcome == ExtractionAccidentOutcome.FATALITIES) {
+                    "${accident.name}: ${accident.deaths} fatalities; site closed for ${accident.shutdownDays} days."
+                } else {
+                    "${accident.name}: machinery damage; site closed for ${accident.shutdownDays} days."
+                }
+                if (result.extractionAccidents.size > 1) "$primary +${result.extractionAccidents.size - 1} more extraction incident(s)." else primary
+            }
             result.simulation.deaths > .0001 -> "Life-support shortage caused ${formatPopulation(result.simulation.deaths)} deaths this day."
             result.simulation.completedSurveys.isNotEmpty() -> "Survey completed for ${result.simulation.completedSurveys.joinToString { "${it.x},${it.y}" }}."
             !fromClock -> "Advanced one complete MineIT simulation day."
