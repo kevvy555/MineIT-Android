@@ -39,6 +39,7 @@ import com.mineit.android.app.DevelopmentDetailAlert
 import com.mineit.android.app.DevelopmentDetailCard
 import com.mineit.android.app.DevelopmentDetailTone
 import com.mineit.android.app.DevelopmentRequirement
+import com.mineit.android.domain.world.Sustainability
 import com.mineit.android.domain.world.WorldTile
 import com.mineit.android.ui.art.MineItAssetPaths
 import com.mineit.android.ui.art.rememberMineItAssetBitmap
@@ -57,6 +58,7 @@ fun DevelopmentDetailDialog(
     detail: DevelopmentDetail,
     statusMessage: String?,
     onUpgrade: () -> Unit,
+    onAdjustHarvest: (Int) -> Unit,
     onDemolish: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -87,6 +89,16 @@ fun DevelopmentDetailDialog(
 
                 DetailSection("OVERVIEW") {
                     MetricGrid(detail.overview)
+                }
+
+                val renewable = tile.deposit?.takeIf {
+                    it.sustainability == Sustainability.RENEWABLE && !it.renewableWiped && !tile.resourceExhausted
+                }
+                if (renewable != null) {
+                    HarvestControl(
+                        percent = (renewable.harvestIntensity.coerceIn(.25, 2.0) * 100.0).toInt(),
+                        onAdjustHarvest = onAdjustHarvest,
+                    )
                 }
 
                 if (detail.operations.isNotEmpty()) {
@@ -179,6 +191,33 @@ fun DevelopmentDetailDialog(
             },
             dismissButton = { MineItSecondaryButton("CANCEL", { confirmDemolition = false }) },
         )
+    }
+}
+
+@Composable
+private fun HarvestControl(percent: Int, onAdjustHarvest: (Int) -> Unit) {
+    Surface(
+        color = MineItPalette.Control,
+        border = BorderStroke(1.dp, MineItPalette.Line),
+        shape = RoundedCornerShape(MineItRadius.Small),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(MineItSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("HARVEST INTENSITY", style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
+                Text("$percent%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                Text(
+                    if (percent > 100) "Above 100% increases output but degrades renewable condition." else if (percent < 100) "Below 100% allows renewable condition to recover." else "Sustainable baseline.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MineItPalette.Muted,
+                )
+            }
+            MineItSecondaryButton("−25%", { onAdjustHarvest(-25) }, enabled = percent > 25)
+            MineItSecondaryButton("+25%", { onAdjustHarvest(25) }, enabled = percent < 200)
+        }
     }
 }
 

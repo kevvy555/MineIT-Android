@@ -18,6 +18,7 @@ import com.mineit.android.domain.colony.ColonyEstablishmentAssessment
 import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.colony.DevelopmentActionResult
 import com.mineit.android.domain.colony.DevelopmentPreview
+import com.mineit.android.domain.colony.ExtractionOperationResult
 import com.mineit.android.domain.colony.HeadquartersDepartureGate
 import com.mineit.android.domain.colony.PopulationSupportCapacity
 import com.mineit.android.domain.colony.SpaceportStatus
@@ -54,6 +55,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val dailySimulationEngine = composition.dailySimulationEngine
     private val commercialDayService = composition.commercialDayService
     private val developmentService = composition.colonyDevelopmentService
+    private val extractionOperationService = composition.extractionOperationService
     private val networkService = composition.colonyNetworkService
     private val establishmentService = composition.colonyEstablishmentService
     private val headquartersService = composition.headquartersService
@@ -239,6 +241,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun developSelectedResource() = commitDevelopment("develop-extraction") { current, coordinate -> developmentService.developExtraction(current, coordinate) }
     fun upgradeSelected() = commitDevelopment("upgrade-development") { current, coordinate -> developmentService.upgrade(current, coordinate) }
     fun demolishSelected() = commitDevelopment("demolish-development") { current, coordinate -> developmentService.demolish(current, coordinate) }
+
+    fun adjustSelectedHarvestIntensity(deltaPercent: Int) {
+        val coordinate = singleActionCoordinate() ?: return
+        val preview = extractionOperationService.adjustHarvestIntensity(state.value, coordinate, deltaPercent)
+        if (!preview.ok) { _statusMessage.value = preview.message; return }
+        viewModelScope.launch {
+            var applied: ExtractionOperationResult? = null
+            val result = session.commit("adjust-harvest-intensity") { current ->
+                extractionOperationService.adjustHarvestIntensity(current, coordinate, deltaPercent).also { applied = it }.state
+            }
+            refreshDerived(result.state)
+            val message = requireNotNull(applied).message
+            _statusMessage.value = if (result.persistence is PersistenceSaveResult.Success) message else "$message Save write failed."
+        }
+    }
 
     fun setSelectedAsPrimaryHeadquarters() {
         val coordinate = singleActionCoordinate() ?: return
