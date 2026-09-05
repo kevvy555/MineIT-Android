@@ -152,6 +152,11 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onUpgrade = viewModel::upgradeSelected,
                     onDemolish = viewModel::demolishSelected,
                     onSetPrimaryHeadquarters = viewModel::setSelectedAsPrimaryHeadquarters,
+                    onPreviewShipResidentsAshore = viewModel::shipResidentTransferPreview,
+                    onMoveShipResidentsAshore = viewModel::moveShipResidentsAshore,
+                    onMoveShipResidentsAboard = viewModel::moveShipResidentsAboard,
+                    onUnloadShipResource = viewModel::transferShipToColony,
+                    onLoadShipResource = viewModel::transferColonyToShip,
                     onAdvanceDay = viewModel::advanceDay,
                     onSetSimulationSpeed = viewModel::setSimulationSpeed,
                     onOpenCommercial = { viewModel.openCommercialPanel(CommercialPanel.TRADE) },
@@ -160,7 +165,11 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                         when (attention.target) {
                             ColonyAttentionTarget.LANDING_SITE -> Unit
                             ColonyAttentionTarget.CORPORATE_SHIP -> viewModel.openCommercialPanel(CommercialPanel.TRADE)
-                            ColonyAttentionTarget.PLAYER_SHIP,
+                            ColonyAttentionTarget.PLAYER_SHIP -> {
+                                showEstablishment = false
+                                val hasDockedPlayerShip = state.fleet.ships.any { it.dockedColonyId == state.activeColony.id }
+                                if (hasDockedPlayerShip) viewModel.selectSector(SectorCoordinate(0, 0)) else showEstablishment = true
+                            }
                             ColonyAttentionTarget.ESTABLISHMENT -> showEstablishment = true
                             ColonyAttentionTarget.FOOD -> viewModel.setMapFocus(MapFocus.FOOD)
                             ColonyAttentionTarget.POWER -> viewModel.setMapFocus(MapFocus.POWER)
