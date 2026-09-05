@@ -39,6 +39,8 @@ import com.mineit.android.app.DevelopmentDetailAlert
 import com.mineit.android.app.DevelopmentDetailCard
 import com.mineit.android.app.DevelopmentDetailTone
 import com.mineit.android.app.DevelopmentRequirement
+import com.mineit.android.domain.colony.ExtractionOverdriveRules
+import com.mineit.android.domain.world.ExtractionOperatingMode
 import com.mineit.android.domain.world.Sustainability
 import com.mineit.android.domain.world.WorldTile
 import com.mineit.android.ui.art.MineItAssetPaths
@@ -59,6 +61,7 @@ fun DevelopmentDetailDialog(
     statusMessage: String?,
     onUpgrade: () -> Unit,
     onAdjustHarvest: (Int) -> Unit,
+    onSetOperatingMode: (ExtractionOperatingMode) -> Unit,
     onDemolish: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -99,6 +102,10 @@ fun DevelopmentDetailDialog(
                         percent = (renewable.harvestIntensity.coerceIn(.25, 2.0) * 100.0).toInt(),
                         onAdjustHarvest = onAdjustHarvest,
                     )
+                }
+
+                if (ExtractionOverdriveRules.supports(tile)) {
+                    OverdriveControl(tile = tile, onSetOperatingMode = onSetOperatingMode)
                 }
 
                 if (detail.operations.isNotEmpty()) {
@@ -217,6 +224,80 @@ private fun HarvestControl(percent: Int, onAdjustHarvest: (Int) -> Unit) {
             }
             MineItSecondaryButton("−25%", { onAdjustHarvest(-25) }, enabled = percent > 25)
             MineItSecondaryButton("+25%", { onAdjustHarvest(25) }, enabled = percent < 200)
+        }
+    }
+}
+
+@Composable
+private fun OverdriveControl(tile: WorldTile, onSetOperatingMode: (ExtractionOperatingMode) -> Unit) {
+    val development = requireNotNull(tile.development)
+    val mode = ExtractionOverdriveRules.mode(tile)
+    val profile = ExtractionOverdriveRules.profile(tile)
+    val shutdown = ExtractionOverdriveRules.isShutdown(tile)
+    val exposure = ExtractionOverdriveRules.riskExposure(tile)
+
+    Surface(
+        color = MineItPalette.Control,
+        border = BorderStroke(1.dp, if (shutdown) MineItPalette.Critical else MineItPalette.Line),
+        shape = RoundedCornerShape(MineItRadius.Small),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(MineItSpacing.Sm),
+            verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm)) {
+                Column(Modifier.weight(1f)) {
+                    Text("OPERATING MODE", style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
+                    Text(profile.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
+                }
+                MineItStatusBadge("RISK ${profile.risk}", if (profile.risk == "NONE") MineItPalette.Success else if (profile.risk == "LOW") MineItPalette.Warning else MineItPalette.Critical)
+            }
+            MetricGrid(
+                listOf(
+                    DevelopmentDetailCard("OUTPUT", "${(profile.output * 100).toInt()}%", "Operating multiplier"),
+                    DevelopmentDetailCard("WORKFORCE", "${(profile.workforce * 100).toInt()}%", "Required staffing multiplier"),
+                    DevelopmentDetailCard("EXPOSURE", "${"%.1f".format(exposure)} / 30", "Risk check threshold"),
+                    DevelopmentDetailCard("CHECKS", development.overdriveRiskChecks.toString(), "Completed exposure checks"),
+                ),
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+                ExtractionOperatingMode.entries.forEach { candidate ->
+                    MineItSecondaryButton(
+                        text = candidate.name,
+                        onClick = { onSetOperatingMode(candidate) },
+                        enabled = !shutdown && candidate != mode,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            if (shutdown) {
+                DetailNotice(
+                    "ACCIDENT SHUTDOWN",
+                    "Facility is closed for ${development.accidentShutdownDays} more day${if (development.accidentShutdownDays == 1) "" else "s"}. Operating mode returns to Normal during recovery.",
+                    DevelopmentDetailTone.BLOCKED,
+                )
+            } else {
+                Text(
+                    when (mode) {
+                        ExtractionOperatingMode.NORMAL -> "Normal operation reduces accumulated exposure by 1 point per productive day."
+                        ExtractionOperatingMode.PUSHED -> "Pushed operation adds 0.3 exposure per productive day for +15% output and +25% staffing demand."
+                        ExtractionOperatingMode.HARD -> "Hard operation adds 1 exposure per productive day for +30% output and +50% staffing demand. Every 30 exposure triggers a 25% accident check."
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MineItPalette.Muted,
+                )
+            }
+            development.lastAccident?.let { accident ->
+                DetailNotice(
+                    "LAST INCIDENT — Y${accident.year} D${accident.day}",
+                    buildString {
+                        append(accident.name)
+                        if (accident.deaths > 0) append(" • ${accident.deaths} fatalities") else append(" • Machinery damage")
+                        append(" • ${accident.shutdownDays}-day shutdown")
+                    },
+                    DevelopmentDetailTone.WARN,
+                )
+            }
         }
     }
 }
