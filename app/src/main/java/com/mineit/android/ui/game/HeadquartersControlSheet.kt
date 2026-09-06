@@ -103,6 +103,14 @@ fun HeadquartersControlSheet(
                 text = model.handoverDetail,
                 tone = model.handoverTone,
             )
+            if (model.primary && model.handoverStatus != "COMPLETE") {
+                MineItPrimaryButton(
+                    text = if (departureGate.ok) "COMPLETE COMMAND HANDOVER" else "HANDOVER BLOCKED",
+                    onClick = onSetPrimary,
+                    enabled = departureGate.ok,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             MineItPanel {
                 MineItSectionHeader(
@@ -438,7 +446,7 @@ object HeadquartersControlPresentation {
         }
         val handoverDetail = when {
             handoverComplete -> "Founding command has already been handed over to colony Headquarters."
-            departureGate.ok -> "Primary Headquarters is constructed and fully staffed; first ship departure may complete command handover."
+            departureGate.ok -> "Primary Headquarters is constructed and fully staffed. Complete command handover now; interstellar launch remains deferred to the later fleet/travel phase."
             else -> departureGate.failures.joinToString(" • ")
         }
 
