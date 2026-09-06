@@ -152,14 +152,26 @@ fun TradeCommercialPanelScreen(
                 }
             }
 
-            if (!spaceport.tradeAllowed) {
-                MineItPanel(modifier = Modifier.fillMaxWidth()) {
-                    MineItSectionHeader("SPACEPORT OFFLINE • EMERGENCY FUEL ONLY", color = MineItPalette.Warning)
-                    Text(
-                        "Normal selling, imports and colonist transfer remain offline. The docked Corporate Ship can still transfer Fuel so the colony can restore Power and bring Spaceport services back online.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MineItPalette.Warning,
-                    )
+            when {
+                !spaceport.corporatePurchaseAllowed -> {
+                    MineItPanel(modifier = Modifier.fillMaxWidth()) {
+                        MineItSectionHeader("CORPORATE PURCHASE LINK OFFLINE", color = MineItPalette.Warning)
+                        Text(
+                            "Purchases need a working computer link. Dock a player ship here or provide a powered and staffed Headquarters. Selling/loading and colonist transfer still use normal Spaceport services.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MineItPalette.Warning,
+                        )
+                    }
+                }
+                !spaceport.tradeAllowed -> {
+                    MineItPanel(modifier = Modifier.fillMaxWidth()) {
+                        MineItSectionHeader("SPACEPORT OFFLINE • PURCHASE LINK ONLINE", color = MineItPalette.Warning)
+                        Text(
+                            "The Corporate Ship can still unload any purchased Food, Build, Fuel or Ore through the working computer link. Selling/loading and colonist transfer remain offline until Spaceport Power returns.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MineItPalette.Warning,
+                        )
+                    }
                 }
             }
 
@@ -192,7 +204,9 @@ fun TradeCommercialPanelScreen(
                         onAmount = { buyAmount = it.coerceIn(1.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
                         buyPrice = buyPrice,
                         onBuyResource = onBuyResource,
+                        corporatePurchaseAllowed = spaceport.corporatePurchaseAllowed,
                         normalSpaceportServicesAvailable = spaceport.tradeAllowed,
+                        purchaseReason = spaceport.corporatePurchaseReason,
                     )
 
                     TradeMode.COLONISTS -> ColonistTradeContent(
@@ -377,21 +391,27 @@ private fun BuyTradeContent(
     onAmount: (Double) -> Unit,
     buyPrice: (ResourceId) -> Double,
     onBuyResource: (ResourceId, Double) -> Unit,
+    corporatePurchaseAllowed: Boolean,
     normalSpaceportServicesAvailable: Boolean,
+    purchaseReason: String,
 ) {
     val category = CorporateTradePresentation.buyCategories.firstOrNull { it.name == categoryName } ?: ResourceCategory.FUEL
     val rows = CorporateTradePresentation.buyRows(state, category)
     val pageCount = max(1, ceil(rows.size / CorporateTradePresentation.PAGE_SIZE.toDouble()).toInt())
     val safePage = page.coerceIn(0, pageCount - 1)
     val visible = rows.drop(safePage * CorporateTradePresentation.PAGE_SIZE).take(CorporateTradePresentation.PAGE_SIZE)
+    val serviceAvailable = CorporateTradePresentation.buyServiceAvailable(corporatePurchaseAllowed)
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
         MineItSectionHeader("BUY FROM CORPORATION", "${format(cargoRemaining)} CARGO")
         Text(
-            if (normalSpaceportServicesAvailable) "Choose an amount once, then tap resources to buy."
-            else "Spaceport services are offline. Only Fuel can be transferred as an emergency recovery purchase.",
+            when {
+                !serviceAvailable -> purchaseReason
+                !normalSpaceportServicesAvailable -> "Purchase link online. The Corporate Ship unloads supplies itself, so Spaceport Power is not required for buying."
+                else -> "Choose an amount once, then tap resources to buy."
+            },
             style = MaterialTheme.typography.bodySmall,
-            color = if (normalSpaceportServicesAvailable) MineItPalette.Muted else MineItPalette.Warning,
+            color = if (serviceAvailable) MineItPalette.Muted else MineItPalette.Warning,
         )
         TradeAmountSelector(amount, onAmount)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
@@ -414,7 +434,6 @@ private fun BuyTradeContent(
                 val unitPrice = buyPrice(row.definition.id)
                 val affordable = (state.company.cash / unitPrice).coerceAtLeast(0.0)
                 val quantity = minOf(amount, cargoRemaining, affordable, CorporateTradePresentation.MAX_TRADE_AMOUNT).toInt().coerceAtLeast(0)
-                val serviceAvailable = CorporateTradePresentation.buyServiceAvailable(row.definition.category, normalSpaceportServicesAvailable)
                 CompactTradeRow(
                     title = row.definition.name,
                     detail = buildString {
@@ -422,7 +441,7 @@ private fun BuyTradeContent(
                         if (row.reserve > 0) append(" • ${format(row.reserve)} reserve")
                         if (row.reserveShortfall > .0001) append(" • SHORT ${format(row.reserveShortfall)}")
                         append(" • £${formatMoney(unitPrice)}/u")
-                        if (!normalSpaceportServicesAvailable && serviceAvailable) append(" • EMERGENCY TRANSFER")
+                        if (!normalSpaceportServicesAvailable && serviceAvailable) append(" • CORPORATE UNLOAD")
                     },
                     action = if (quantity > 0) "BUY ${format(quantity.toDouble())}\n£${formatMoney(quantity * unitPrice)}" else "BUY",
                     enabled = serviceAvailable && quantity > 0,
