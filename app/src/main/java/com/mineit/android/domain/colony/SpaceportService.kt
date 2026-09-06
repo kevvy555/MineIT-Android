@@ -2,17 +2,20 @@ package com.mineit.android.domain.colony
 
 import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
+import com.mineit.android.domain.trade.CorporatePurchaseAccess
+import com.mineit.android.domain.trade.CorporatePurchaseAccessSource
 
-/** Current Basic Spaceport operational rules from the pinned web baseline. */
+/** Current Basic Spaceport operational rules from the pinned web baseline plus approved native purchase-link semantics. */
 class SpaceportService {
     fun status(state: GameState, network: ColonyNetworkSnapshot): SpaceportStatus {
         val colony = state.activeColony
         val colonyOperational = colony.status !in setOf(ColonyStatus.DEAD, ColonyStatus.SITE_SELECTION)
         val powered = network.spaceportPowerFactor >= .999
         val operational = colonyOperational && powered
+        val purchaseAccess = CorporatePurchaseAccess.evaluate(state, network)
         val reason = when {
             !colonyOperational -> "Spaceport unavailable while the colony is not operational."
-            !powered -> "Spaceport is unpowered. Trade, loading, transfers, engineering, market actions and normal departures are disabled."
+            !powered -> "Spaceport is unpowered. Selling, loading, transfers, engineering, market actions and normal departures are disabled."
             else -> "Spaceport online."
         }
         return SpaceportStatus(
@@ -30,6 +33,9 @@ class SpaceportService {
             engineeringAllowed = operational,
             shipMarketAllowed = operational,
             normalDepartureAllowed = operational,
+            corporatePurchaseAllowed = colonyOperational && purchaseAccess.available,
+            corporatePurchaseSource = purchaseAccess.source,
+            corporatePurchaseReason = purchaseAccess.reason,
             reason = reason,
         )
     }
@@ -50,5 +56,8 @@ data class SpaceportStatus(
     val engineeringAllowed: Boolean,
     val shipMarketAllowed: Boolean,
     val normalDepartureAllowed: Boolean,
+    val corporatePurchaseAllowed: Boolean,
+    val corporatePurchaseSource: CorporatePurchaseAccessSource,
+    val corporatePurchaseReason: String,
     val reason: String,
 )
