@@ -152,6 +152,17 @@ fun TradeCommercialPanelScreen(
                 }
             }
 
+            if (!spaceport.tradeAllowed) {
+                MineItPanel(modifier = Modifier.fillMaxWidth()) {
+                    MineItSectionHeader("SPACEPORT OFFLINE • EMERGENCY FUEL ONLY", color = MineItPalette.Warning)
+                    Text(
+                        "Normal selling, imports and colonist transfer remain offline. The docked Corporate Ship can still transfer Fuel so the colony can restore Power and bring Spaceport services back online.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MineItPalette.Warning,
+                    )
+                }
+            }
+
             Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                 when (mode) {
                     TradeMode.SELL -> SellTradeContent(
@@ -181,7 +192,7 @@ fun TradeCommercialPanelScreen(
                         onAmount = { buyAmount = it.coerceIn(1.0, CorporateTradePresentation.MAX_TRADE_AMOUNT) },
                         buyPrice = buyPrice,
                         onBuyResource = onBuyResource,
-                        enabled = spaceport.tradeAllowed,
+                        normalSpaceportServicesAvailable = spaceport.tradeAllowed,
                     )
 
                     TradeMode.COLONISTS -> ColonistTradeContent(
@@ -366,7 +377,7 @@ private fun BuyTradeContent(
     onAmount: (Double) -> Unit,
     buyPrice: (ResourceId) -> Double,
     onBuyResource: (ResourceId, Double) -> Unit,
-    enabled: Boolean,
+    normalSpaceportServicesAvailable: Boolean,
 ) {
     val category = CorporateTradePresentation.buyCategories.firstOrNull { it.name == categoryName } ?: ResourceCategory.FUEL
     val rows = CorporateTradePresentation.buyRows(state, category)
@@ -376,7 +387,12 @@ private fun BuyTradeContent(
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
         MineItSectionHeader("BUY FROM CORPORATION", "${format(cargoRemaining)} CARGO")
-        Text("Choose an amount once, then tap resources to buy.", style = MaterialTheme.typography.bodySmall, color = MineItPalette.Muted)
+        Text(
+            if (normalSpaceportServicesAvailable) "Choose an amount once, then tap resources to buy."
+            else "Spaceport services are offline. Only Fuel can be transferred as an emergency recovery purchase.",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (normalSpaceportServicesAvailable) MineItPalette.Muted else MineItPalette.Warning,
+        )
         TradeAmountSelector(amount, onAmount)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
             CorporateTradePresentation.buyCategories.forEach { candidate ->
@@ -398,6 +414,7 @@ private fun BuyTradeContent(
                 val unitPrice = buyPrice(row.definition.id)
                 val affordable = (state.company.cash / unitPrice).coerceAtLeast(0.0)
                 val quantity = minOf(amount, cargoRemaining, affordable, CorporateTradePresentation.MAX_TRADE_AMOUNT).toInt().coerceAtLeast(0)
+                val serviceAvailable = CorporateTradePresentation.buyServiceAvailable(row.definition.category, normalSpaceportServicesAvailable)
                 CompactTradeRow(
                     title = row.definition.name,
                     detail = buildString {
@@ -405,11 +422,12 @@ private fun BuyTradeContent(
                         if (row.reserve > 0) append(" • ${format(row.reserve)} reserve")
                         if (row.reserveShortfall > .0001) append(" • SHORT ${format(row.reserveShortfall)}")
                         append(" • £${formatMoney(unitPrice)}/u")
+                        if (!normalSpaceportServicesAvailable && serviceAvailable) append(" • EMERGENCY TRANSFER")
                     },
                     action = if (quantity > 0) "BUY ${format(quantity.toDouble())}\n£${formatMoney(quantity * unitPrice)}" else "BUY",
-                    enabled = enabled && quantity > 0,
+                    enabled = serviceAvailable && quantity > 0,
                     onAction = { onBuyResource(row.definition.id, amount) },
-                    secondaryAction = if (row.reserveShortfall >= 1.0) "TO RESERVE" else null,
+                    secondaryAction = if (serviceAvailable && row.reserveShortfall >= 1.0) "TO RESERVE" else null,
                     onSecondary = { onBuyResource(row.definition.id, row.reserveShortfall) },
                 )
             }
