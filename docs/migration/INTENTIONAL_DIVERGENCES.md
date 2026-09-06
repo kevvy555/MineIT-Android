@@ -28,16 +28,16 @@ Migration impact: <save/import/UI/domain impact, or none>
 
 ## Entries
 
-### 2026-09-06 — Corporate Ship emergency Fuel recovery
+### 2026-09-06 — Corporate Ship purchases use a colony computer link
 
-**Area:** Corporate Ship / Spaceport / Fuel recovery  
+**Area:** Corporate Ship / colony communications / purchase unloading  
 **Source baseline:** MineIT `075b3d82fd88334b20b3cfe7d6e2731c8d840533`, game `5.13.22`, web save `16`  
-**Web behaviour:** Corporate Ship buy, sell and passenger/colonist services require the Basic Spaceport to receive its full 10 Power. If the Spaceport is offline, all purchases are rejected, including Fuel.  
-**Android behaviour:** Normal Corporate Ship services retain the same powered-Spaceport gate, but while a Corporate Ship is already docked, **Fuel purchases only** remain available as an emergency transfer. Food, Build, Ore, selling and colonist transfer remain unavailable until Spaceport Power is restored. Emergency Fuel still consumes normal company cash and visit import-cargo capacity and uses the normal corporate buy price.  
-**Reason:** The `0.7.7-migration` physical-device playthrough exposed a Fuel → Power → Spaceport → Fuel deadlock: a colony could run short of Fuel, lose Spaceport Power, receive the already-scheduled Corporate Ship, then be unable to buy the Fuel required to recover Power. That made a recoverable colony effectively unrecoverable and blocked continued migration validation.  
-**Approval/reference:** Kev approved the focused Phase 7 stabilization pass after the 6 September 2026 `0.7.7-migration` manual test.  
-**Tests:** `CorporateTradeServiceTest.buyKeepsNormalSpaceportGateButAllowsEmergencyFuelRecovery`; `CorporateTradePresentationTest.offline Spaceport leaves only Fuel buying available for recovery`.  
-**Migration impact:** No save-format change. Deliberate trade-service and Corporate Ship UI semantic difference only.
+**Web behaviour:** Corporate Ship buying is gated with the Basic Spaceport services, so loss of Spaceport Power prevents purchases as well as selling/loading/passenger transfer.  
+**Android behaviour:** Once the Corporate Ship is docked, buying Food, Build, Fuel or Ore requires a working corporation computer/communications endpoint rather than Spaceport Power. Access is available when either (a) any player ship is docked at the colony or (b) a Headquarters is constructed, fully staffed and powered. The Corporate Ship unloads purchased supplies itself. Normal price, company-cash and visit import-cargo limits still apply. Selling/loading and colonist/passenger transfer continue to require powered Spaceport services.  
+**Reason:** The intended fiction and gameplay responsibility is that the player only needs a functioning computer system to place the purchase; the visiting Corporate Ship performs the unloading. This also removes the Fuel → Power → Spaceport → Fuel recovery deadlock without inventing a Fuel-only exception.  
+**Approval/reference:** Kev explicitly corrected the rule during the 6 September 2026 Phase 7 physical-device stabilization review: purchase access is provided by a docked player ship or a powered and staffed Headquarters.  
+**Tests:** `CorporatePurchaseAccessTest` covers docked-ship, operational-HQ and no-link states; `CorporateTradeServiceTest.buyUsesComputerLinkRatherThanSpaceportPower`; `CorporateTradePresentationTest.buy buttons follow corporate computer-link availability for every import category`.  
+**Migration impact:** No save-format change. Deliberate Corporate Ship purchase-service/UI semantic difference only. The earlier temporary `emergency Fuel only` stabilization rule is superseded by this entry.
 
 ### 2026-09-06 — Explicit founding command handover before travel migration
 
