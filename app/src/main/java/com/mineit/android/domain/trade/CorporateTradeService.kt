@@ -16,7 +16,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
-/** Canonical native corporate-ship trade owner for the pinned MineIT 5.13.15 rules. */
+/** Canonical native corporate-ship trade owner for the pinned MineIT 5.13.15 rules plus approved migration stabilisation divergences. */
 class CorporateTradeService(
     private val reputationService: ReputationService = ReputationService(),
 ) {
@@ -105,6 +105,22 @@ class CorporateTradeService(
     fun buyPrice(resourceId: ResourceId): Double =
         ResourceCatalogue.require(resourceId).sellPrice * MineItConfig.RESOURCE_VALUE_SCALE * MineItConfig.CORPORATE_BUY_MARKUP
 
+    /**
+     * Normal import service requires a powered Spaceport. During an active Corporate Ship visit,
+     * Fuel alone remains purchasable as an emergency recovery transfer so a Fuel/Power shortage
+     * cannot permanently lock the colony out of the service required to restore generation.
+     */
+    fun buyServiceAvailable(state: GameState, resourceId: ResourceId, spaceportServicesAvailable: Boolean): Boolean {
+        if (!state.activeColony.trade.active) return false
+        val definition = ResourceCatalogue.get(resourceId) ?: return false
+        return spaceportServicesAvailable || definition.category == ResourceCategory.FUEL
+    }
+
+    fun emergencyFuelTransferActive(state: GameState, resourceId: ResourceId, spaceportServicesAvailable: Boolean): Boolean {
+        val definition = ResourceCatalogue.get(resourceId) ?: return false
+        return state.activeColony.trade.active && !spaceportServicesAvailable && definition.category == ResourceCategory.FUEL
+    }
+
     fun quoteSell(state: GameState, resourceId: ResourceId, amount: Double, processingBonus: Double = 0.0): TradeQuote {
         val stock = state.activeColony.inventory.find(resourceId) ?: return TradeQuote(0.0, 0.0)
         var remaining = minOf(amount.coerceAtLeast(0.0), sellableAmount(state, resourceId), exportRemaining(state))
@@ -186,8 +202,9 @@ class CorporateTradeService(
     fun buy(state: GameState, resourceId: ResourceId, amount: Double, spaceportServicesAvailable: Boolean): TradeActionResult {
         val colony = state.activeColony
         if (!colony.trade.active) return TradeActionResult(state, false, "No corporate ship is docked.")
-        if (!spaceportServicesAvailable) return TradeActionResult(state, false, SPACEPORT_OFFLINE)
         val definition = ResourceCatalogue.get(resourceId) ?: return TradeActionResult(state, false, "Unknown resource.")
+        val emergencyFuelTransfer = emergencyFuelTransferActive(state, resourceId, spaceportServicesAvailable)
+        if (!buyServiceAvailable(state, resourceId, spaceportServicesAvailable)) return TradeActionResult(state, false, SPACEPORT_OFFLINE)
         val requested = floor(amount.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0)
         if (requested <= 0.0) return TradeActionResult(state, false, "Nothing selected.")
         val cargo = cargoRemaining(state)
@@ -201,7 +218,8 @@ class CorporateTradeService(
         val nextContract = colony.contract?.copy(localCosts = colony.contract.localCosts + cost)
         val nextColony = colony.copy(inventory = nextInventory, trade = colony.trade.copy(cargoUsed = colony.trade.cargoUsed + quantity), contract = nextContract)
         val next = updateColony(state.copy(company = state.company.copy(cash = state.company.cash - cost)), nextColony)
-        return TradeActionResult(next, true, "Bought ${formatQty(quantity)} units for £${"%.2f".format(cost)}.", quantity, cost)
+        val prefix = if (emergencyFuelTransfer) "Emergency Fuel transfer: " else ""
+        return TradeActionResult(next, true, "${prefix}Bought ${formatQty(quantity)} units for £${"%.2f".format(cost)}.", quantity, cost)
     }
 
     /**
