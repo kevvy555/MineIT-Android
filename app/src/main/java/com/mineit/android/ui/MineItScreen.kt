@@ -56,6 +56,7 @@ import com.mineit.android.ui.game.GameHeader
 import com.mineit.android.ui.game.HeadquartersControlReadiness
 import com.mineit.android.ui.game.HeadquartersControlSheet
 import com.mineit.android.ui.game.PlayerShipControlSheet
+import com.mineit.android.ui.game.SectorActionBar
 import com.mineit.android.ui.game.SectorContextBar
 import com.mineit.android.ui.map.ColonyMap
 import com.mineit.android.ui.map.MapFocus
@@ -124,6 +125,10 @@ fun MineItScreen(
     val selectedHeadquarters = selectedTile?.takeIf {
         it.development?.kind == DevelopmentKind.HEADQUARTERS && HeadquartersControlReadiness.isReady(it, network)
     }
+    val primaryHeadquarters = colony.headquarters.primary
+        ?.let(colony.world::tileAt)
+        ?.takeIf { it.development?.kind == DevelopmentKind.HEADQUARTERS && HeadquartersControlReadiness.isReady(it, network) }
+    val headquartersSheetTile = selectedHeadquarters ?: if (showColonyDetail) primaryHeadquarters else null
     val selectedPlayerShip = selectedTile
         ?.takeIf { it.coordinate.x == 0 && it.coordinate.y == 0 }
         ?.let {
@@ -148,8 +153,6 @@ fun MineItScreen(
                 state = state,
                 metrics = metrics,
                 network = network,
-                spaceport = spaceport,
-                onOpenColonyDetail = { showColonyDetail = true },
                 notificationContent = {
                     ColonyAttentionStrip(
                         attention = attention,
@@ -224,52 +227,86 @@ fun MineItScreen(
                                     .padding(horizontal = 18.dp, vertical = 2.dp),
                             )
                         }
-                        if (selectedTiles.isNotEmpty()) {
-                            SectorContextBar(
-                                selectedTiles = selectedTiles,
-                                surveyDays = selectedSurveyDays,
-                                surveyableSelectedCount = surveyableSelectedCount,
-                                primaryHeadquarters = colony.headquarters.primary,
-                                powerPreview = powerPreview,
-                                housingPreview = housingPreview,
-                                industryPreview = industryPreview,
-                                headquartersPreview = headquartersPreview,
-                                extractionPreview = extractionPreview,
-                                upgradePreview = upgradePreview,
-                                onSurveyOne = onSurveySelectedSector,
-                                onSurveyMany = onSurveySelectedSectors,
-                                onBuild = onBuild,
-                                onDevelop = onDevelopExtraction,
-                                onUpgrade = onUpgrade,
-                                onDemolish = onDemolish,
-                                onSetPrimary = onSetPrimaryHeadquarters,
-                                onClearSelection = onClearSelection,
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(horizontal = 2.dp, vertical = 2.dp),
-                            )
-                        }
                     }
 
-                    FooterControls(
-                        speed = simulationSpeed,
-                        enabled = colony.status != ColonyStatus.DEAD,
-                        commercialActive = colony.trade.active,
-                        showCommercial = true,
-                        handoverAvailable = handoverAvailable,
-                        onSetSpeed = onSetSimulationSpeed,
-                        onAdvanceDay = onAdvanceDay,
-                        onOpenCommercial = onOpenCommercial,
-                        onOpenHandover = onOpenHandover,
-                        onMainMenu = onMainMenu,
-                        modifier = Modifier.height(GameplayFooterHeight),
+                    SectorContextBar(
+                        selectedTiles = selectedTiles,
+                        surveyDays = selectedSurveyDays,
+                        surveyableSelectedCount = surveyableSelectedCount,
+                        powerPreview = powerPreview,
+                        housingPreview = housingPreview,
+                        industryPreview = industryPreview,
+                        headquartersPreview = headquartersPreview,
+                        extractionPreview = extractionPreview,
+                        upgradePreview = upgradePreview,
                     )
+
+                    if (selectedTiles.isEmpty()) {
+                        FooterControls(
+                            speed = simulationSpeed,
+                            enabled = colony.status != ColonyStatus.DEAD,
+                            commercialActive = colony.trade.active,
+                            showCommercial = true,
+                            handoverAvailable = handoverAvailable,
+                            onSetSpeed = onSetSimulationSpeed,
+                            onAdvanceDay = onAdvanceDay,
+                            onOpenCommercial = onOpenCommercial,
+                            onOpenHandover = onOpenHandover,
+                            onMainMenu = onMainMenu,
+                            modifier = Modifier.height(GameplayFooterHeight),
+                        )
+                    } else {
+                        SectorActionBar(
+                            selectedTiles = selectedTiles,
+                            surveyDays = selectedSurveyDays,
+                            surveyableSelectedCount = surveyableSelectedCount,
+                            primaryHeadquarters = colony.headquarters.primary,
+                            powerPreview = powerPreview,
+                            housingPreview = housingPreview,
+                            industryPreview = industryPreview,
+                            headquartersPreview = headquartersPreview,
+                            extractionPreview = extractionPreview,
+                            upgradePreview = upgradePreview,
+                            onSurveyOne = onSurveySelectedSector,
+                            onSurveyMany = onSurveySelectedSectors,
+                            onBuild = onBuild,
+                            onDevelop = onDevelopExtraction,
+                            onUpgrade = onUpgrade,
+                            onDemolish = onDemolish,
+                            onSetPrimary = onSetPrimaryHeadquarters,
+                            onClearSelection = onClearSelection,
+                            modifier = Modifier.height(GameplayFooterHeight),
+                        )
+                    }
                 }
             }
         }
     }
 
-    if (showColonyDetail) {
+    if (headquartersSheetTile != null) {
+        HeadquartersControlSheet(
+            state = state,
+            metrics = metrics,
+            network = network,
+            spaceport = spaceport,
+            departureGate = departureGate,
+            tile = headquartersSheetTile,
+            upgradePreview = upgradePreview,
+            statusMessage = statusMessage,
+            onSetPrimary = onSetPrimaryHeadquarters,
+            onUpgrade = onUpgrade,
+            onDemolish = {
+                onDemolish()
+                showColonyDetail = false
+                onClearSelection()
+            },
+            onDismiss = {
+                if (showColonyDetail) showColonyDetail = false else onClearSelection()
+            },
+        )
+    } else if (showColonyDetail) {
+        // Before a Primary HQ exists, retain the early-establishment fallback. Once the HQ exists,
+        // Colony Control is represented by the HQ sheet rather than a separate duplicate surface.
         ColonyDetailSheet(
             state = state,
             metrics = metrics,
@@ -277,22 +314,6 @@ fun MineItScreen(
             spaceport = spaceport,
             departureGate = departureGate,
             onDismiss = { showColonyDetail = false },
-        )
-    } else if (selectedHeadquarters != null) {
-        HeadquartersControlSheet(
-            state = state,
-            network = network,
-            departureGate = departureGate,
-            tile = selectedHeadquarters,
-            upgradePreview = upgradePreview,
-            statusMessage = statusMessage,
-            onSetPrimary = onSetPrimaryHeadquarters,
-            onUpgrade = onUpgrade,
-            onDemolish = {
-                onDemolish()
-                onClearSelection()
-            },
-            onDismiss = onClearSelection,
         )
     } else if (selectedPlayerShip != null) {
         PlayerShipControlSheet(
