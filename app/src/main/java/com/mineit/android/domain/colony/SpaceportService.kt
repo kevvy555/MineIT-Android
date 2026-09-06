@@ -56,8 +56,8 @@ data class SpaceportStatus(
     val engineeringAllowed: Boolean,
     val shipMarketAllowed: Boolean,
     val normalDepartureAllowed: Boolean,
-    val corporatePurchaseAllowed: Boolean,
-    val corporatePurchaseSource: CorporatePurchaseAccessSource,
-    val corporatePurchaseReason: String,
-    val reason: String,
+    val corporatePurchaseAllowed: Boolean = false,
+    val corporatePurchaseSource: CorporatePurchaseAccessSource = CorporatePurchaseAccessSource.NONE,
+    val corporatePurchaseReason: String = "Corporate purchase link unavailable.",
+    val reason: String = "",
 )
