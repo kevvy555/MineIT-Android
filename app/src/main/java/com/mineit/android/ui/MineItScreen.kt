@@ -54,6 +54,7 @@ import com.mineit.android.ui.design.MineItSpacing
 import com.mineit.android.ui.game.ColonyAttentionStrip
 import com.mineit.android.ui.game.ColonyDetailSheet
 import com.mineit.android.ui.game.GameHeader
+import com.mineit.android.ui.game.HeadquartersControlReadiness
 import com.mineit.android.ui.game.HeadquartersControlSheet
 import com.mineit.android.ui.game.PlayerShipControlSheet
 import com.mineit.android.ui.game.SectorContextBar
@@ -116,7 +117,9 @@ fun MineItScreen(
     var showColonyDetail by remember { mutableStateOf(false) }
     val colony = state.activeColony
     val selectedTile = selectedTiles.singleOrNull()
-    val selectedHeadquarters = selectedTile?.takeIf { it.development?.kind == DevelopmentKind.HEADQUARTERS }
+    val selectedHeadquarters = selectedTile?.takeIf {
+        it.development?.kind == DevelopmentKind.HEADQUARTERS && HeadquartersControlReadiness.isReady(it, network)
+    }
     val selectedPlayerShip = selectedTile
         ?.takeIf { it.coordinate.x == 0 && it.coordinate.y == 0 }
         ?.let {
