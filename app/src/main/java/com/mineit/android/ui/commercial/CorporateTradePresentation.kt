@@ -27,6 +27,10 @@ object CorporateTradePresentation {
     fun defaultColonistAmount(projection: ColonistTransferProjection): Int =
         projection.maxSafeTransfer.coerceIn(0, projection.maxTransfer)
 
+    /** Mirrors the authoritative trade-service recovery rule for button availability only. */
+    fun buyServiceAvailable(category: ResourceCategory, normalSpaceportServicesAvailable: Boolean): Boolean =
+        normalSpaceportServicesAvailable || category == ResourceCategory.FUEL
+
     fun sellStocks(
         state: GameState,
         sellableAmount: (ResourceId) -> Double,
