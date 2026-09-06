@@ -9,9 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +60,9 @@ import com.mineit.android.ui.game.SectorContextBar
 import com.mineit.android.ui.map.ColonyMap
 import com.mineit.android.ui.map.MapFocus
 import com.mineit.android.ui.map.MapStateFilter
+
+private val GameplayRailHeight = 36.dp
+private val GameplayFooterHeight = 38.dp
 
 @Composable
 fun MineItScreen(
@@ -137,11 +139,10 @@ fun MineItScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .statusBarsPadding()
-                .navigationBarsPadding()
                 .padding(horizontal = MineItSpacing.Sm, vertical = MineItSpacing.Xs),
             verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
         ) {
+            // Keep the existing top HUD intact; the layout work below is isolated to the gameplay viewport.
             GameHeader(
                 state = state,
                 metrics = metrics,
@@ -157,9 +158,9 @@ fun MineItScreen(
                     else onOpenAttention()
                 },
             )
-            statusMessage?.let { StatusStrip(it) }
 
             if (colony.status == ColonyStatus.SITE_SELECTION) {
+                statusMessage?.let { StatusStrip(it) }
                 LandingSiteSelection(
                     candidates = colony.world.landingCandidates,
                     onSelect = onSelectLandingSite,
@@ -171,70 +172,94 @@ fun MineItScreen(
                     onSetSpeed = onSetSimulationSpeed,
                     onAdvanceDay = onAdvanceDay,
                     onMainMenu = onMainMenu,
+                    modifier = Modifier.height(GameplayFooterHeight),
                 )
             } else {
-                MineItSecondaryButton(
-                    text = if (colony.trade.active) "COMMERCIAL • TRADE SHIP DOCKED" else "COMMERCIAL • TRADE / CONTRACTS / BUYERS / LOG",
-                    onClick = onOpenCommercial,
-                    modifier = Modifier.fillMaxWidth(),
-                    selected = colony.trade.active,
-                    accent = if (colony.trade.active) MineItPalette.Success else MineItPalette.Accent,
-                )
-
-                MapToolbar(
-                    focus = mapFocus,
-                    filters = mapFilters,
-                    onFocus = onSetMapFocus,
-                    onToggleFilter = onToggleMapFilter,
-                    onReset = onClearMapFilters,
-                )
-
-                ColonyMap(
-                    tiles = colony.world.tiles,
-                    activeSurveys = colony.world.activeSurveys,
-                    queued = colony.world.surveyQueue.toSet(),
-                    selected = selectedTiles.mapTo(linkedSetOf()) { it.coordinate },
-                    surveyable = surveyableCoordinates,
-                    scanningLevel = scanningLevel,
-                    surveySlots = surveySlots,
-                    focus = mapFocus,
-                    stateFilters = mapFilters,
-                    network = network,
-                    onTap = onSelectSector,
-                    onBeginMultiSelect = onBeginMultiSelect,
-                    onAddMultiSelect = onAddMultiSelect,
-                    onEndMultiSelect = onEndMultiSelect,
+                // Everything below the attention strip is a fixed-rail viewport. Selection state and
+                // transient messages can change content, but never the amount of space assigned to the map.
+                Column(
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                )
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    MineItSecondaryButton(
+                        text = if (colony.trade.active) "COMMERCIAL • TRADE SHIP DOCKED" else "COMMERCIAL • TRADE / CONTRACTS / BUYERS / LOG",
+                        onClick = onOpenCommercial,
+                        modifier = Modifier.fillMaxWidth().height(GameplayRailHeight),
+                        selected = colony.trade.active,
+                        accent = if (colony.trade.active) MineItPalette.Success else MineItPalette.Accent,
+                        compact = true,
+                    )
 
-                SectorContextBar(
-                    selectedTiles = selectedTiles,
-                    surveyDays = selectedSurveyDays,
-                    surveyableSelectedCount = surveyableSelectedCount,
-                    primaryHeadquarters = colony.headquarters.primary,
-                    powerPreview = powerPreview,
-                    housingPreview = housingPreview,
-                    industryPreview = industryPreview,
-                    headquartersPreview = headquartersPreview,
-                    extractionPreview = extractionPreview,
-                    upgradePreview = upgradePreview,
-                    onSurveyOne = onSurveySelectedSector,
-                    onSurveyMany = onSurveySelectedSectors,
-                    onBuild = onBuild,
-                    onDevelop = onDevelopExtraction,
-                    onUpgrade = onUpgrade,
-                    onDemolish = onDemolish,
-                    onSetPrimary = onSetPrimaryHeadquarters,
-                    onClearSelection = onClearSelection,
-                )
+                    MapToolbar(
+                        focus = mapFocus,
+                        filters = mapFilters,
+                        onFocus = onSetMapFocus,
+                        onToggleFilter = onToggleMapFilter,
+                        onReset = onClearMapFilters,
+                        modifier = Modifier.height(GameplayRailHeight),
+                    )
 
-                FooterControls(
-                    speed = simulationSpeed,
-                    enabled = colony.status != ColonyStatus.DEAD,
-                    onSetSpeed = onSetSimulationSpeed,
-                    onAdvanceDay = onAdvanceDay,
-                    onMainMenu = onMainMenu,
-                )
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ColonyMap(
+                            tiles = colony.world.tiles,
+                            activeSurveys = colony.world.activeSurveys,
+                            queued = colony.world.surveyQueue.toSet(),
+                            selected = selectedTiles.mapTo(linkedSetOf()) { it.coordinate },
+                            surveyable = surveyableCoordinates,
+                            scanningLevel = scanningLevel,
+                            surveySlots = surveySlots,
+                            focus = mapFocus,
+                            stateFilters = mapFilters,
+                            network = network,
+                            onTap = onSelectSector,
+                            onBeginMultiSelect = onBeginMultiSelect,
+                            onAddMultiSelect = onAddMultiSelect,
+                            onEndMultiSelect = onEndMultiSelect,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                        statusMessage?.let {
+                            StatusStrip(
+                                message = it,
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .padding(horizontal = 18.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+
+                    SectorContextBar(
+                        selectedTiles = selectedTiles,
+                        surveyDays = selectedSurveyDays,
+                        surveyableSelectedCount = surveyableSelectedCount,
+                        primaryHeadquarters = colony.headquarters.primary,
+                        powerPreview = powerPreview,
+                        housingPreview = housingPreview,
+                        industryPreview = industryPreview,
+                        headquartersPreview = headquartersPreview,
+                        extractionPreview = extractionPreview,
+                        upgradePreview = upgradePreview,
+                        onSurveyOne = onSurveySelectedSector,
+                        onSurveyMany = onSurveySelectedSectors,
+                        onBuild = onBuild,
+                        onDevelop = onDevelopExtraction,
+                        onUpgrade = onUpgrade,
+                        onDemolish = onDemolish,
+                        onSetPrimary = onSetPrimaryHeadquarters,
+                        onClearSelection = onClearSelection,
+                    )
+
+                    FooterControls(
+                        speed = simulationSpeed,
+                        enabled = colony.status != ColonyStatus.DEAD,
+                        onSetSpeed = onSetSimulationSpeed,
+                        onAdvanceDay = onAdvanceDay,
+                        onMainMenu = onMainMenu,
+                        modifier = Modifier.height(GameplayFooterHeight),
+                    )
+                }
             }
         }
     }
@@ -284,13 +309,14 @@ fun MineItScreen(
 }
 
 @Composable
-private fun StatusStrip(message: String) {
+private fun StatusStrip(message: String, modifier: Modifier = Modifier) {
     val critical = message.contains("lost", true) || message.contains("failed", true) || message.contains("death", true)
     val color = if (critical) MineItPalette.Critical else MineItPalette.Accent
     Surface(
-        color = color.copy(alpha = .10f),
+        color = MineItPalette.Panel.copy(alpha = .94f),
         shape = RoundedCornerShape(5.dp),
-        modifier = Modifier.fillMaxWidth(),
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = .45f)),
+        modifier = modifier.fillMaxWidth(),
     ) {
         Text(
             text = message,
@@ -310,10 +336,11 @@ private fun MapToolbar(
     onFocus: (MapFocus) -> Unit,
     onToggleFilter: (MapStateFilter) -> Unit,
     onReset: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+        modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MapFocus.entries.forEach { option ->
@@ -330,6 +357,7 @@ private fun MapToolbar(
                 onClick = { onFocus(option) },
                 selected = focus == option,
                 accent = accent,
+                compact = true,
             )
         }
         MapStateFilter.entries.forEach { filter ->
@@ -338,9 +366,15 @@ private fun MapToolbar(
                 onClick = { onToggleFilter(filter) },
                 selected = filter in filters,
                 accent = MineItPalette.Survey,
+                compact = true,
             )
         }
-        MineItSecondaryButton("RESET", onReset, enabled = focus != MapFocus.ALL || filters.isNotEmpty())
+        MineItSecondaryButton(
+            "RESET",
+            onReset,
+            enabled = focus != MapFocus.ALL || filters.isNotEmpty(),
+            compact = true,
+        )
     }
 }
 
@@ -351,8 +385,9 @@ private fun FooterControls(
     onSetSpeed: (Int) -> Unit,
     onAdvanceDay: () -> Unit,
     onMainMenu: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         listOf(0 to "PAUSE", 1 to "1×", 2 to "2×", 4 to "4×").forEach { (value, label) ->
             MineItSecondaryButton(
                 text = label,
@@ -360,6 +395,7 @@ private fun FooterControls(
                 enabled = enabled,
                 selected = speed == value,
                 modifier = Modifier.weight(1f),
+                compact = true,
             )
         }
         MineItSecondaryButton(
@@ -368,9 +404,15 @@ private fun FooterControls(
             enabled = enabled && speed == 0,
             selected = false,
             accent = MineItPalette.Warning,
-            modifier = Modifier.weight(1.25f),
+            modifier = Modifier.weight(1.15f),
+            compact = true,
         )
-        MineItSecondaryButton("MENU", onMainMenu, modifier = Modifier.weight(1f))
+        MineItSecondaryButton(
+            "MENU",
+            onMainMenu,
+            modifier = Modifier.weight(1f),
+            compact = true,
+        )
     }
 }
 
