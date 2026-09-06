@@ -52,7 +52,10 @@ class AppComposition(application: Application) {
     val populationSupportService = PopulationSupportService()
     val spaceportService = SpaceportService()
     val reputationService = ReputationService()
-    val corporateTradeService = CorporateTradeService(reputationService)
+    val corporateTradeService = CorporateTradeService(
+        reputationService = reputationService,
+        networkService = colonyNetworkService,
+    )
     val contractService = ContractService(reputationService)
     val buyerService = BuyerService(reputationService)
     val corporateEventService = CorporateEventService()
