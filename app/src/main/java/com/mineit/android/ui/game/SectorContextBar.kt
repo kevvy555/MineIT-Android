@@ -34,7 +34,7 @@ import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.design.MineItSpacing
 import com.mineit.android.ui.design.MineItStatusBadge
 
-private val SectorContextHeight = 148.dp
+private val SectorContextHeight = 88.dp
 
 @Composable
 fun SectorContextBar(
@@ -58,12 +58,14 @@ fun SectorContextBar(
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Keep this slot a constant height so selecting a sector never steals space from the map.
-    // Richer contexts scroll inside their own slot rather than resizing the primary map viewport.
+    // This slot is deliberately constant-height. Selection detail scrolls inside it so the map
+    // viewport never changes size when selection state or available actions change.
     Box(modifier = modifier.fillMaxWidth().height(SectorContextHeight)) {
         MineItPanel(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             raised = true,
+            contentPadding = 5.dp,
+            contentSpacing = 3.dp,
         ) {
             when {
                 selectedTiles.isEmpty() -> EmptyContext()
@@ -105,6 +107,8 @@ private fun EmptyContext() {
                 "Tap to inspect • drag across surveyable sectors to queue several surveys",
                 style = MaterialTheme.typography.labelSmall,
                 color = MineItPalette.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -124,15 +128,18 @@ private fun MultiSelectionContext(
                 if (surveyableCount > 0) "$surveyableCount can be added to the survey plan" else "No selected sectors are currently surveyable",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (surveyableCount > 0) MineItPalette.Survey else MineItPalette.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        MineItSecondaryButton("CLEAR", onClear)
+        MineItSecondaryButton("CLEAR", onClear, compact = true)
     }
     MineItPrimaryButton(
         text = if (surveyableCount > 0) "QUEUE $surveyableCount SURVEYS" else "NO SURVEYABLE SECTORS",
         onClick = onSurvey,
         enabled = surveyableCount > 0,
         modifier = Modifier.fillMaxWidth(),
+        compact = true,
     )
 }
 
@@ -167,11 +174,11 @@ private fun SingleSectorContext(
                 sectorSummary(tile),
                 style = MaterialTheme.typography.labelSmall,
                 color = MineItPalette.Muted,
-                maxLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        MineItSecondaryButton("CLOSE", onClear)
+        MineItSecondaryButton("CLOSE", onClear, compact = true)
     }
 
     tile.deposit?.let { deposit ->
@@ -188,17 +195,18 @@ private fun SingleSectorContext(
         val actions = rememberScrollState()
         Row(
             Modifier.fillMaxWidth().horizontalScroll(actions),
-            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
         ) {
             MineItPrimaryButton(
                 text = if (upgradePreview?.nextLevel ?: 0 > 0) "UPGRADE → L${upgradePreview?.nextLevel}" else "UPGRADE",
                 onClick = onUpgrade,
                 enabled = upgradePreview?.ok == true,
+                compact = true,
             )
             if (development.kind == DevelopmentKind.HEADQUARTERS && tile.coordinate != primaryHeadquarters) {
-                MineItSecondaryButton("SET PRIMARY HQ", onSetPrimary)
+                MineItSecondaryButton("SET PRIMARY HQ", onSetPrimary, compact = true)
             }
-            MineItDestructiveButton("DEMOLISH", onDemolish)
+            MineItDestructiveButton("DEMOLISH", onDemolish, compact = true)
         }
         upgradePreview?.takeIf { !it.ok }?.reason?.let { RequirementText(it) }
         return
@@ -210,20 +218,21 @@ private fun SingleSectorContext(
             onClick = onSurvey,
             enabled = surveyDays != null,
             modifier = Modifier.fillMaxWidth(),
+            compact = true,
         )
         return
     }
 
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+        horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
     ) {
-        MineItSecondaryButton("POWER", { onBuild(DevelopmentKind.POWER) }, enabled = powerPreview?.ok == true)
-        MineItSecondaryButton("HOUSING", { onBuild(DevelopmentKind.HOUSING) }, enabled = housingPreview?.ok == true)
-        MineItSecondaryButton("INDUSTRY", { onBuild(DevelopmentKind.INDUSTRY) }, enabled = industryPreview?.ok == true)
-        MineItSecondaryButton("HQ", { onBuild(DevelopmentKind.HEADQUARTERS) }, enabled = headquartersPreview?.ok == true)
+        MineItSecondaryButton("POWER", { onBuild(DevelopmentKind.POWER) }, enabled = powerPreview?.ok == true, compact = true)
+        MineItSecondaryButton("HOUSING", { onBuild(DevelopmentKind.HOUSING) }, enabled = housingPreview?.ok == true, compact = true)
+        MineItSecondaryButton("INDUSTRY", { onBuild(DevelopmentKind.INDUSTRY) }, enabled = industryPreview?.ok == true, compact = true)
+        MineItSecondaryButton("HQ", { onBuild(DevelopmentKind.HEADQUARTERS) }, enabled = headquartersPreview?.ok == true, compact = true)
         if (tile.deposit != null && !tile.resourceCovered && !tile.resourceExhausted) {
-            MineItPrimaryButton("DEVELOP", onDevelop, enabled = extractionPreview?.ok == true)
+            MineItPrimaryButton("DEVELOP", onDevelop, enabled = extractionPreview?.ok == true, compact = true)
         }
     }
 
