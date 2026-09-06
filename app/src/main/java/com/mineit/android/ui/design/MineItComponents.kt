@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -23,12 +24,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+private val CompactControlHeight = 36.dp
+private val CompactControlPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
 
 @Composable
 fun MineItPanel(
     modifier: Modifier = Modifier,
     raised: Boolean = false,
+    contentPadding: Dp = MineItSpacing.Md,
+    contentSpacing: Dp = MineItSpacing.Sm,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -38,8 +45,8 @@ fun MineItPanel(
                 shape = RoundedCornerShape(MineItRadius.Medium),
             )
             .border(1.dp, MineItPalette.Line, RoundedCornerShape(MineItRadius.Medium))
-            .padding(MineItSpacing.Md),
-        verticalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+            .padding(contentPadding),
+        verticalArrangement = Arrangement.spacedBy(contentSpacing),
         content = content,
     )
 }
@@ -130,10 +137,11 @@ fun MineItPrimaryButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = MineItTouch.Minimum),
+        modifier = modifier.heightIn(min = if (compact) CompactControlHeight else MineItTouch.Minimum),
         enabled = enabled,
         shape = RoundedCornerShape(MineItRadius.Medium),
         colors = ButtonDefaults.buttonColors(
@@ -143,8 +151,9 @@ fun MineItPrimaryButton(
             disabledContentColor = MineItPalette.Disabled,
         ),
         border = BorderStroke(1.dp, if (enabled) MineItPalette.Accent else MineItPalette.Line),
+        contentPadding = if (compact) CompactControlPadding else ButtonDefaults.ContentPadding,
     ) {
-        Text(text, style = MaterialTheme.typography.labelLarge)
+        Text(text, style = if (compact) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelLarge)
     }
 }
 
@@ -156,10 +165,11 @@ fun MineItSecondaryButton(
     enabled: Boolean = true,
     selected: Boolean = false,
     accent: Color = MineItPalette.Accent,
+    compact: Boolean = false,
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = MineItTouch.Minimum),
+        modifier = modifier.heightIn(min = if (compact) CompactControlHeight else MineItTouch.Minimum),
         enabled = enabled,
         shape = RoundedCornerShape(MineItRadius.Medium),
         colors = ButtonDefaults.outlinedButtonColors(
@@ -168,8 +178,13 @@ fun MineItSecondaryButton(
             disabledContentColor = MineItPalette.Disabled,
         ),
         border = BorderStroke(1.dp, if (selected) accent else MineItPalette.Line),
+        contentPadding = if (compact) CompactControlPadding else ButtonDefaults.ContentPadding,
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+        Text(
+            text,
+            style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+        )
     }
 }
 
@@ -179,10 +194,11 @@ fun MineItDestructiveButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    compact: Boolean = false,
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = MineItTouch.Minimum),
+        modifier = modifier.heightIn(min = if (compact) CompactControlHeight else MineItTouch.Minimum),
         enabled = enabled,
         shape = RoundedCornerShape(MineItRadius.Medium),
         border = BorderStroke(1.dp, MineItPalette.Critical.copy(alpha = if (enabled) .8f else .25f)),
@@ -191,8 +207,9 @@ fun MineItDestructiveButton(
             contentColor = MineItPalette.Critical,
             disabledContentColor = MineItPalette.Disabled,
         ),
+        contentPadding = if (compact) CompactControlPadding else ButtonDefaults.ContentPadding,
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium)
+        Text(text, style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
     }
 }
 
