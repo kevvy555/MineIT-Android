@@ -124,20 +124,31 @@ class CorporateTradeServiceTest {
     }
 
     @Test
-    fun buyRespectsCargoCashAndSpaceportGate() {
+    fun buyKeepsNormalSpaceportGateButAllowsEmergencyFuelRecovery() {
         var state = settled(9L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
-        val blocked = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = false)
+
+        assertFalse(service.buyServiceAvailable(state, ResourceId("surface-iron"), spaceportServicesAvailable = false))
+        val blocked = service.buy(state, ResourceId("surface-iron"), 100.0, spaceportServicesAvailable = false)
         assertFalse(blocked.ok)
         assertEquals(state.company.cash, blocked.state.company.cash, .0001)
 
-        val bought = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = true)
-        assertTrue(bought.ok)
-        assertEquals(100.0, bought.quantity, .0001)
-        assertEquals(210.0, bought.value, .0001)
-        assertEquals(31_790.0, bought.state.company.cash, .0001)
-        assertEquals(100.0, bought.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
-        assertEquals(100.0, bought.state.activeColony.trade.cargoUsed, .0001)
+        assertTrue(service.buyServiceAvailable(state, ResourceId("coal"), spaceportServicesAvailable = false))
+        assertTrue(service.emergencyFuelTransferActive(state, ResourceId("coal"), spaceportServicesAvailable = false))
+        val emergency = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = false)
+        assertTrue(emergency.ok)
+        assertTrue(emergency.message.contains("Emergency Fuel transfer"))
+        assertEquals(100.0, emergency.quantity, .0001)
+        assertEquals(210.0, emergency.value, .0001)
+        assertEquals(31_790.0, emergency.state.company.cash, .0001)
+        assertEquals(100.0, emergency.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
+        assertEquals(100.0, emergency.state.activeColony.trade.cargoUsed, .0001)
+
+        val normal = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = true)
+        assertTrue(normal.ok)
+        assertFalse(normal.message.contains("Emergency Fuel transfer"))
+        assertEquals(100.0, normal.quantity, .0001)
+        assertEquals(210.0, normal.value, .0001)
     }
 
     @Test
