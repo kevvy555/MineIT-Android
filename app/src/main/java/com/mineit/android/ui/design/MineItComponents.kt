@@ -27,8 +27,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-private val CompactControlHeight = 36.dp
-private val CompactControlPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp)
+private val CompactControlHeight = 32.dp
+private val CompactControlPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
 
 @Composable
 fun MineItPanel(
