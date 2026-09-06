@@ -45,6 +45,7 @@ fun GameHeader(
     modifier: Modifier = Modifier,
     establishment: ColonyEstablishmentAssessment = hudAssessment(state, metrics, network),
     onOpenEstablishment: (() -> Unit)? = null,
+    notificationContent: (@Composable () -> Unit)? = null,
 ) {
     val colony = state.activeColony
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
@@ -69,6 +70,7 @@ fun GameHeader(
             }
         }
 
+        notificationContent?.invoke()
         OperationalHud(metrics, network, establishment)
         ResourceHud(metrics, establishment)
 
