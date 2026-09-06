@@ -52,12 +52,9 @@ class CorporateTradePresentationTest {
     }
 
     @Test
-    fun `offline Spaceport leaves only Fuel buying available for recovery`() {
-        assertTrue(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.FUEL, normalSpaceportServicesAvailable = false))
-        assertFalse(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.FOOD, normalSpaceportServicesAvailable = false))
-        assertFalse(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.BUILD, normalSpaceportServicesAvailable = false))
-        assertFalse(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.ORE, normalSpaceportServicesAvailable = false))
-        assertTrue(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.ORE, normalSpaceportServicesAvailable = true))
+    fun `buy buttons follow corporate computer-link availability for every import category`() {
+        assertTrue(CorporateTradePresentation.buyServiceAvailable(corporatePurchaseAllowed = true))
+        assertFalse(CorporateTradePresentation.buyServiceAvailable(corporatePurchaseAllowed = false))
     }
 
     @Test
