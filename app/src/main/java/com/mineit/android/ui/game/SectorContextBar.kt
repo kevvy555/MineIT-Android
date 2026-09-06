@@ -2,11 +2,16 @@ package com.mineit.android.ui.game
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.mineit.android.domain.colony.DevelopmentPreview
 import com.mineit.android.domain.model.ResourceId
 import com.mineit.android.domain.resources.ResourceCatalogue
@@ -27,6 +33,8 @@ import com.mineit.android.ui.design.MineItPrimaryButton
 import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.design.MineItSpacing
 import com.mineit.android.ui.design.MineItStatusBadge
+
+private val SectorContextHeight = 148.dp
 
 @Composable
 fun SectorContextBar(
@@ -50,33 +58,40 @@ fun SectorContextBar(
     onClearSelection: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    MineItPanel(modifier = modifier.fillMaxWidth(), raised = true) {
-        when {
-            selectedTiles.isEmpty() -> EmptyContext()
-            selectedTiles.size > 1 -> MultiSelectionContext(
-                selectedCount = selectedTiles.size,
-                surveyableCount = surveyableSelectedCount,
-                onSurvey = onSurveyMany,
-                onClear = onClearSelection,
-            )
-            else -> SingleSectorContext(
-                tile = selectedTiles.single(),
-                surveyDays = surveyDays,
-                primaryHeadquarters = primaryHeadquarters,
-                powerPreview = powerPreview,
-                housingPreview = housingPreview,
-                industryPreview = industryPreview,
-                headquartersPreview = headquartersPreview,
-                extractionPreview = extractionPreview,
-                upgradePreview = upgradePreview,
-                onSurvey = onSurveyOne,
-                onBuild = onBuild,
-                onDevelop = onDevelop,
-                onUpgrade = onUpgrade,
-                onDemolish = onDemolish,
-                onSetPrimary = onSetPrimary,
-                onClear = onClearSelection,
-            )
+    // Keep this slot a constant height so selecting a sector never steals space from the map.
+    // Richer contexts scroll inside their own slot rather than resizing the primary map viewport.
+    Box(modifier = modifier.fillMaxWidth().height(SectorContextHeight)) {
+        MineItPanel(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            raised = true,
+        ) {
+            when {
+                selectedTiles.isEmpty() -> EmptyContext()
+                selectedTiles.size > 1 -> MultiSelectionContext(
+                    selectedCount = selectedTiles.size,
+                    surveyableCount = surveyableSelectedCount,
+                    onSurvey = onSurveyMany,
+                    onClear = onClearSelection,
+                )
+                else -> SingleSectorContext(
+                    tile = selectedTiles.single(),
+                    surveyDays = surveyDays,
+                    primaryHeadquarters = primaryHeadquarters,
+                    powerPreview = powerPreview,
+                    housingPreview = housingPreview,
+                    industryPreview = industryPreview,
+                    headquartersPreview = headquartersPreview,
+                    extractionPreview = extractionPreview,
+                    upgradePreview = upgradePreview,
+                    onSurvey = onSurveyOne,
+                    onBuild = onBuild,
+                    onDevelop = onDevelop,
+                    onUpgrade = onUpgrade,
+                    onDemolish = onDemolish,
+                    onSetPrimary = onSetPrimary,
+                    onClear = onClearSelection,
+                )
+            }
         }
     }
 }
@@ -87,7 +102,7 @@ private fun EmptyContext() {
         Column(Modifier.weight(1f)) {
             Text("SELECT A SECTOR", style = MaterialTheme.typography.titleSmall, color = MineItPalette.Muted)
             Text(
-                "Tap to inspect • hold then drag to select several sectors for surveying",
+                "Tap to inspect • drag across surveyable sectors to queue several surveys",
                 style = MaterialTheme.typography.labelSmall,
                 color = MineItPalette.Muted,
             )
