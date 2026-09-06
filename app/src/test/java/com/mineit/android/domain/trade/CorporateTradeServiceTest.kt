@@ -124,29 +124,29 @@ class CorporateTradeServiceTest {
     }
 
     @Test
-    fun buyKeepsNormalSpaceportGateButAllowsEmergencyFuelRecovery() {
+    fun buyUsesComputerLinkRatherThanSpaceportPower() {
         var state = settled(9L).copy(date = GameDate.fromAbsoluteDay(AbsoluteDay(181)))
         state = service.arrive(state).state
 
-        assertFalse(service.buyServiceAvailable(state, ResourceId("surface-iron"), spaceportServicesAvailable = false))
-        val blocked = service.buy(state, ResourceId("surface-iron"), 100.0, spaceportServicesAvailable = false)
-        assertFalse(blocked.ok)
-        assertEquals(state.company.cash, blocked.state.company.cash, .0001)
+        assertTrue(service.buyServiceAvailable(state, ResourceId("surface-iron")))
+        val oreBefore = state.activeColony.inventory.amountFor(ResourceId("surface-iron"))
+        val corporateUnload = service.buy(state, ResourceId("surface-iron"), 100.0, spaceportServicesAvailable = false)
+        assertTrue(corporateUnload.ok)
+        assertTrue(corporateUnload.message.contains("Corporate Ship unload"))
+        assertEquals(oreBefore + 100.0, corporateUnload.state.activeColony.inventory.amountFor(ResourceId("surface-iron")), .0001)
 
-        assertTrue(service.buyServiceAvailable(state, ResourceId("coal"), spaceportServicesAvailable = false))
-        assertTrue(service.emergencyFuelTransferActive(state, ResourceId("coal"), spaceportServicesAvailable = false))
-        val emergency = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = false)
-        assertTrue(emergency.ok)
-        assertTrue(emergency.message.contains("Emergency Fuel transfer"))
-        assertEquals(100.0, emergency.quantity, .0001)
-        assertEquals(210.0, emergency.value, .0001)
-        assertEquals(31_790.0, emergency.state.company.cash, .0001)
-        assertEquals(100.0, emergency.state.activeColony.inventory.amountFor(ResourceId("coal")), .0001)
-        assertEquals(100.0, emergency.state.activeColony.trade.cargoUsed, .0001)
+        val noComputerLink = state.copy(
+            fleet = state.fleet.copy(ships = emptyList(), selectedShipId = null),
+        )
+        assertFalse(service.buyServiceAvailable(noComputerLink, ResourceId("coal")))
+        val blocked = service.buy(noComputerLink, ResourceId("coal"), 100.0, spaceportServicesAvailable = false)
+        assertFalse(blocked.ok)
+        assertTrue(blocked.message.contains("dock a player ship", ignoreCase = true))
+        assertEquals(noComputerLink.company.cash, blocked.state.company.cash, .0001)
 
         val normal = service.buy(state, ResourceId("coal"), 100.0, spaceportServicesAvailable = true)
         assertTrue(normal.ok)
-        assertFalse(normal.message.contains("Emergency Fuel transfer"))
+        assertFalse(normal.message.contains("Corporate Ship unload"))
         assertEquals(100.0, normal.quantity, .0001)
         assertEquals(210.0, normal.value, .0001)
     }
