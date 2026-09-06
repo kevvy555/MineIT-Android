@@ -7,7 +7,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -82,67 +80,62 @@ fun ColonyMap(
     val activeByCoordinate = remember(activeSurveys) { activeSurveys.associateBy { it.coordinate } }
     var gridPixels by remember { mutableStateOf(IntSize.Zero) }
 
-    BoxWithConstraints(modifier) {
-        val gridSize = minOf(maxWidth, maxHeight)
-        Box(
-            modifier = Modifier
-                .size(gridSize)
-                .align(Alignment.Center)
-                .onSizeChanged { gridPixels = it }
-                .pointerSurveySelect(
-                    gridPixels = gridPixels,
-                    surveyable = surveyable,
-                    onStart = { coordinate ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onBeginMultiSelect(coordinate)
-                    },
-                    onDrag = onAddMultiSelect,
-                    onEnd = onEndMultiSelect,
-                ),
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                for (y in -4..3) {
-                    Row(Modifier.weight(1f).fillMaxWidth()) {
-                        for (x in -4..3) {
-                            val coordinate = SectorCoordinate(x, y)
-                            val tile = byCoordinate[coordinate]
-                            if (tile == null) {
-                                Box(Modifier.weight(1f).fillMaxHeight())
-                            } else {
-                                val matches = MapPresentation.matches(
-                                    tile = tile,
-                                    focus = focus,
-                                    stateFilters = stateFilters,
-                                    queued = queued,
-                                    active = activeByCoordinate.keys,
-                                    network = network,
-                                )
-                                ColonyMapTile(
-                                    tile = tile,
-                                    activeSurvey = activeByCoordinate[coordinate],
-                                    queued = coordinate in queued,
-                                    selected = coordinate in selected,
-                                    multiSelected = selected.size > 1 && coordinate in selected,
-                                    resurveyAvailable = isResurveyAvailable(tile, scanningLevel),
-                                    problem = MapPresentation.isProblem(tile, network),
-                                    dimmed = !matches,
-                                    onClick = { onTap(coordinate) },
-                                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                                )
-                            }
+    Box(
+        modifier = modifier
+            .onSizeChanged { gridPixels = it }
+            .pointerSurveySelect(
+                gridPixels = gridPixels,
+                surveyable = surveyable,
+                onStart = { coordinate ->
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onBeginMultiSelect(coordinate)
+                },
+                onDrag = onAddMultiSelect,
+                onEnd = onEndMultiSelect,
+            ),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            for (y in -4..3) {
+                Row(Modifier.weight(1f).fillMaxWidth()) {
+                    for (x in -4..3) {
+                        val coordinate = SectorCoordinate(x, y)
+                        val tile = byCoordinate[coordinate]
+                        if (tile == null) {
+                            Box(Modifier.weight(1f).fillMaxHeight())
+                        } else {
+                            val matches = MapPresentation.matches(
+                                tile = tile,
+                                focus = focus,
+                                stateFilters = stateFilters,
+                                queued = queued,
+                                active = activeByCoordinate.keys,
+                                network = network,
+                            )
+                            ColonyMapTile(
+                                tile = tile,
+                                activeSurvey = activeByCoordinate[coordinate],
+                                queued = coordinate in queued,
+                                selected = coordinate in selected,
+                                multiSelected = selected.size > 1 && coordinate in selected,
+                                resurveyAvailable = isResurveyAvailable(tile, scanningLevel),
+                                problem = MapPresentation.isProblem(tile, network),
+                                dimmed = !matches,
+                                onClick = { onTap(coordinate) },
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
                         }
                     }
                 }
             }
-            if (activeSurveys.isNotEmpty() || queued.isNotEmpty()) {
-                SurveyHud(
-                    scanningLevel = scanningLevel,
-                    slots = surveySlots,
-                    active = activeSurveys,
-                    queuedCount = queued.size,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(3.dp),
-                )
-            }
+        }
+        if (activeSurveys.isNotEmpty() || queued.isNotEmpty()) {
+            SurveyHud(
+                scanningLevel = scanningLevel,
+                slots = surveySlots,
+                active = activeSurveys,
+                queuedCount = queued.size,
+                modifier = Modifier.align(Alignment.TopEnd).padding(3.dp),
+            )
         }
     }
 }
