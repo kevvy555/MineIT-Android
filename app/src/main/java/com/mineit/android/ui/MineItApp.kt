@@ -3,16 +3,13 @@ package com.mineit.android.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mineit.android.app.ColonyAttentionTarget
@@ -25,7 +22,6 @@ import com.mineit.android.ui.commercial.CommercialPanelScreen
 import com.mineit.android.ui.commercial.ContractCommercialPanelScreen
 import com.mineit.android.ui.commercial.CorporateEventDialog
 import com.mineit.android.ui.commercial.TradeCommercialPanelScreen
-import com.mineit.android.ui.design.MineItSecondaryButton
 import com.mineit.android.ui.game.ColonyEstablishmentDialog
 import com.mineit.android.ui.game.CriticalResourceWarningDialog
 import com.mineit.android.ui.game.DevelopmentDetailDialog
@@ -114,6 +110,7 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     extractionPreview = viewModel.extractionPreview(),
                     upgradePreview = viewModel.upgradePreview(),
                     departureGate = viewModel.departureGate(),
+                    handoverAvailable = establishment.required && state.activeColony.status != ColonyStatus.SITE_SELECTION,
                     onSelectLandingSite = viewModel::selectLandingSite,
                     onSelectSector = { coordinate ->
                         if (coordinate in surveyableCoordinates) {
@@ -160,6 +157,10 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                     onAdvanceDay = viewModel::advanceDay,
                     onSetSimulationSpeed = viewModel::setSimulationSpeed,
                     onOpenCommercial = { viewModel.openCommercialPanel(CommercialPanel.TRADE) },
+                    onOpenHandover = {
+                        developmentDetailCoordinate = null
+                        showEstablishment = true
+                    },
                     onOpenAttention = {
                         developmentDetailCoordinate = null
                         when (attention.target) {
@@ -197,18 +198,6 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                             developmentDetailCoordinate = null
                         },
                         onDismiss = { developmentDetailCoordinate = null },
-                    )
-                }
-
-                if (establishment.required && state.activeColony.status != ColonyStatus.SITE_SELECTION && !showEstablishment) {
-                    MineItSecondaryButton(
-                        text = "HANDOVER • ${establishment.phase.name}",
-                        onClick = {
-                            developmentDetailCoordinate = null
-                            showEstablishment = true
-                        },
-                        selected = !establishment.acknowledged,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 62.dp),
                     )
                 }
 
