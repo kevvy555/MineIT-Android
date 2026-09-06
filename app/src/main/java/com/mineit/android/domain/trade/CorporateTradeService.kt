@@ -1,5 +1,6 @@
 package com.mineit.android.domain.trade
 
+import com.mineit.android.domain.colony.ColonyNetworkService
 import com.mineit.android.domain.config.MineItConfig
 import com.mineit.android.domain.model.ColonyState
 import com.mineit.android.domain.model.ColonyStatus
@@ -16,9 +17,10 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
-/** Canonical native corporate-ship trade owner for the pinned MineIT 5.13.15 rules plus approved migration stabilisation divergences. */
+/** Canonical native corporate-ship trade owner for the pinned MineIT rules plus approved migration divergences. */
 class CorporateTradeService(
     private val reputationService: ReputationService = ReputationService(),
+    private val networkService: ColonyNetworkService = ColonyNetworkService(),
 ) {
     fun cargoCapacity(state: GameState): Double = state.activeColony.trade.visitCargoCapacity
         ?: min(MineItConfig.TRADE_MAX_CARGO, MineItConfig.TRADE_BASE_CARGO + state.company.reputation.coerceAtLeast(0.0) * MineItConfig.TRADE_CARGO_PER_REP)
@@ -105,21 +107,11 @@ class CorporateTradeService(
     fun buyPrice(resourceId: ResourceId): Double =
         ResourceCatalogue.require(resourceId).sellPrice * MineItConfig.RESOURCE_VALUE_SCALE * MineItConfig.CORPORATE_BUY_MARKUP
 
-    /**
-     * Normal import service requires a powered Spaceport. During an active Corporate Ship visit,
-     * Fuel alone remains purchasable as an emergency recovery transfer so a Fuel/Power shortage
-     * cannot permanently lock the colony out of the service required to restore generation.
-     */
-    fun buyServiceAvailable(state: GameState, resourceId: ResourceId, spaceportServicesAvailable: Boolean): Boolean {
-        if (!state.activeColony.trade.active) return false
-        val definition = ResourceCatalogue.get(resourceId) ?: return false
-        return spaceportServicesAvailable || definition.category == ResourceCategory.FUEL
-    }
+    fun purchaseAccess(state: GameState): CorporatePurchaseAccessStatus =
+        CorporatePurchaseAccess.evaluate(state, networkService.calculate(state))
 
-    fun emergencyFuelTransferActive(state: GameState, resourceId: ResourceId, spaceportServicesAvailable: Boolean): Boolean {
-        val definition = ResourceCatalogue.get(resourceId) ?: return false
-        return state.activeColony.trade.active && !spaceportServicesAvailable && definition.category == ResourceCategory.FUEL
-    }
+    fun buyServiceAvailable(state: GameState, resourceId: ResourceId): Boolean =
+        state.activeColony.trade.active && ResourceCatalogue.get(resourceId) != null && purchaseAccess(state).available
 
     fun quoteSell(state: GameState, resourceId: ResourceId, amount: Double, processingBonus: Double = 0.0): TradeQuote {
         val stock = state.activeColony.inventory.find(resourceId) ?: return TradeQuote(0.0, 0.0)
@@ -199,12 +191,17 @@ class CorporateTradeService(
         processingBonus = processingBonus,
     )
 
+    /**
+     * Purchases require a working computer/communications endpoint, not Spaceport Power. The
+     * Corporate Ship unloads purchased supplies itself. The legacy boolean is retained only to
+     * distinguish the player-facing message when the colony Spaceport happens to be offline.
+     */
     fun buy(state: GameState, resourceId: ResourceId, amount: Double, spaceportServicesAvailable: Boolean): TradeActionResult {
         val colony = state.activeColony
         if (!colony.trade.active) return TradeActionResult(state, false, "No corporate ship is docked.")
         val definition = ResourceCatalogue.get(resourceId) ?: return TradeActionResult(state, false, "Unknown resource.")
-        val emergencyFuelTransfer = emergencyFuelTransferActive(state, resourceId, spaceportServicesAvailable)
-        if (!buyServiceAvailable(state, resourceId, spaceportServicesAvailable)) return TradeActionResult(state, false, SPACEPORT_OFFLINE)
+        val access = purchaseAccess(state)
+        if (!access.available) return TradeActionResult(state, false, access.reason)
         val requested = floor(amount.takeIf { it.isFinite() }?.coerceAtLeast(0.0) ?: 0.0)
         if (requested <= 0.0) return TradeActionResult(state, false, "Nothing selected.")
         val cargo = cargoRemaining(state)
@@ -218,7 +215,7 @@ class CorporateTradeService(
         val nextContract = colony.contract?.copy(localCosts = colony.contract.localCosts + cost)
         val nextColony = colony.copy(inventory = nextInventory, trade = colony.trade.copy(cargoUsed = colony.trade.cargoUsed + quantity), contract = nextContract)
         val next = updateColony(state.copy(company = state.company.copy(cash = state.company.cash - cost)), nextColony)
-        val prefix = if (emergencyFuelTransfer) "Emergency Fuel transfer: " else ""
+        val prefix = if (spaceportServicesAvailable) "" else "Corporate Ship unload: "
         return TradeActionResult(next, true, "${prefix}Bought ${formatQty(quantity)} units for £${"%.2f".format(cost)}.", quantity, cost)
     }
 
@@ -395,6 +392,6 @@ class CorporateTradeService(
     )
 
     companion object {
-        const val SPACEPORT_OFFLINE = "Basic Spaceport services are offline: provide its full 10 Power to enable trade, cargo, passenger and Engineering services."
+        const val SPACEPORT_OFFLINE = "Basic Spaceport services are offline: provide its full 10 Power to enable selling, cargo loading, passenger and Engineering services."
     }
 }
