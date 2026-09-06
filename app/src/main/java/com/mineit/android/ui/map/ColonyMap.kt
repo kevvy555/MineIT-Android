@@ -140,7 +140,7 @@ fun ColonyMap(
                     slots = surveySlots,
                     active = activeSurveys,
                     queuedCount = queued.size,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(3.dp),
                 )
             }
         }
@@ -291,32 +291,37 @@ private fun SurveyHud(
         if (task.totalDays <= 0) 1f else (1.0 - task.daysRemaining / task.totalDays.toDouble()).coerceIn(0.0, 1.0).toFloat()
     } ?: 0f
     Surface(
-        modifier = modifier.widthIn(min = 104.dp, max = 150.dp),
-        color = MineItPalette.Control.copy(alpha = .94f),
+        modifier = modifier.widthIn(min = 82.dp, max = 116.dp),
+        color = MineItPalette.Control.copy(alpha = .92f),
         border = androidx.compose.foundation.BorderStroke(1.dp, MineItPalette.Survey.copy(alpha = .48f)),
-        shape = RoundedCornerShape(5.dp),
+        shape = RoundedCornerShape(4.dp),
     ) {
-        Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text("SCANNING • L$scanningLevel", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Black, color = MineItPalette.Survey)
+        Column(
+            Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
             Text(
-                "${active.size}/${slots.coerceAtLeast(1)} ACTIVE • $queuedCount QUEUED",
-                style = MaterialTheme.typography.labelSmall,
-                color = MineItPalette.Text,
+                "SCAN L$scanningLevel • ${active.size}/${slots.coerceAtLeast(1)} • ${queuedCount}Q",
+                color = MineItPalette.Survey,
+                fontSize = 8.sp,
+                lineHeight = 9.sp,
+                fontWeight = FontWeight.Black,
                 maxLines = 1,
             )
             lead?.let { task ->
                 Text(
-                    "${task.coordinate.x},${task.coordinate.y} • ${if (task.resurvey) "RESCAN" else "SURVEY"} • ${ceil(task.daysRemaining).toInt()}d",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MineItPalette.Muted,
+                    "${task.coordinate.x},${task.coordinate.y} • ${if (task.resurvey) "R" else "S"} • ${ceil(task.daysRemaining).toInt()}d",
+                    color = MineItPalette.Text,
+                    fontSize = 7.5.sp,
+                    lineHeight = 8.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Box(Modifier.fillMaxWidth().height(3.dp).background(MineItPalette.Line, RoundedCornerShape(99.dp))) {
+                Box(Modifier.fillMaxWidth().height(2.dp).background(MineItPalette.Line, RoundedCornerShape(99.dp))) {
                     Box(
                         Modifier
                             .fillMaxWidth(progress)
-                            .height(3.dp)
+                            .height(2.dp)
                             .background(MineItPalette.Survey, RoundedCornerShape(99.dp)),
                     )
                 }
