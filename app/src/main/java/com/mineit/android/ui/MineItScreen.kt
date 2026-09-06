@@ -61,8 +61,8 @@ import com.mineit.android.ui.map.ColonyMap
 import com.mineit.android.ui.map.MapFocus
 import com.mineit.android.ui.map.MapStateFilter
 
-private val GameplayRailHeight = 36.dp
-private val GameplayFooterHeight = 38.dp
+private val GameplayRailHeight = 32.dp
+private val GameplayFooterHeight = 34.dp
 
 @Composable
 fun MineItScreen(
@@ -88,6 +88,7 @@ fun MineItScreen(
     extractionPreview: DevelopmentPreview?,
     upgradePreview: DevelopmentPreview?,
     departureGate: HeadquartersDepartureGate,
+    handoverAvailable: Boolean,
     onSelectLandingSite: (Int) -> Unit,
     onSelectSector: (SectorCoordinate) -> Unit,
     onBeginMultiSelect: (SectorCoordinate) -> Unit,
@@ -112,6 +113,7 @@ fun MineItScreen(
     onAdvanceDay: () -> Unit,
     onSetSimulationSpeed: (Int) -> Unit,
     onOpenCommercial: () -> Unit,
+    onOpenHandover: () -> Unit,
     onOpenAttention: () -> Unit,
     onMainMenu: () -> Unit,
     modifier: Modifier = Modifier,
@@ -139,23 +141,23 @@ fun MineItScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(scaffoldPadding)
-                .padding(horizontal = MineItSpacing.Sm, vertical = MineItSpacing.Xs),
-            verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs),
+                .padding(horizontal = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
         ) {
-            // Keep the existing top HUD intact; the layout work below is isolated to the gameplay viewport.
             GameHeader(
                 state = state,
                 metrics = metrics,
                 network = network,
                 spaceport = spaceport,
                 onOpenColonyDetail = { showColonyDetail = true },
-            )
-
-            ColonyAttentionStrip(
-                attention = attention,
-                onClick = {
-                    if (attention.target == ColonyAttentionTarget.COLONY) showColonyDetail = true
-                    else onOpenAttention()
+                notificationContent = {
+                    ColonyAttentionStrip(
+                        attention = attention,
+                        onClick = {
+                            if (attention.target == ColonyAttentionTarget.COLONY) showColonyDetail = true
+                            else onOpenAttention()
+                        },
+                    )
                 },
             )
 
@@ -169,27 +171,21 @@ fun MineItScreen(
                 FooterControls(
                     speed = simulationSpeed,
                     enabled = false,
+                    commercialActive = false,
+                    showCommercial = false,
+                    handoverAvailable = false,
                     onSetSpeed = onSetSimulationSpeed,
                     onAdvanceDay = onAdvanceDay,
+                    onOpenCommercial = onOpenCommercial,
+                    onOpenHandover = onOpenHandover,
                     onMainMenu = onMainMenu,
                     modifier = Modifier.height(GameplayFooterHeight),
                 )
             } else {
-                // Everything below the attention strip is a fixed-rail viewport. Selection state and
-                // transient messages can change content, but never the amount of space assigned to the map.
                 Column(
                     modifier = Modifier.fillMaxWidth().weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
                 ) {
-                    MineItSecondaryButton(
-                        text = if (colony.trade.active) "COMMERCIAL • TRADE SHIP DOCKED" else "COMMERCIAL • TRADE / CONTRACTS / BUYERS / LOG",
-                        onClick = onOpenCommercial,
-                        modifier = Modifier.fillMaxWidth().height(GameplayRailHeight),
-                        selected = colony.trade.active,
-                        accent = if (colony.trade.active) MineItPalette.Success else MineItPalette.Accent,
-                        compact = true,
-                    )
-
                     MapToolbar(
                         focus = mapFocus,
                         filters = mapFilters,
@@ -228,34 +224,43 @@ fun MineItScreen(
                                     .padding(horizontal = 18.dp, vertical = 2.dp),
                             )
                         }
+                        if (selectedTiles.isNotEmpty()) {
+                            SectorContextBar(
+                                selectedTiles = selectedTiles,
+                                surveyDays = selectedSurveyDays,
+                                surveyableSelectedCount = surveyableSelectedCount,
+                                primaryHeadquarters = colony.headquarters.primary,
+                                powerPreview = powerPreview,
+                                housingPreview = housingPreview,
+                                industryPreview = industryPreview,
+                                headquartersPreview = headquartersPreview,
+                                extractionPreview = extractionPreview,
+                                upgradePreview = upgradePreview,
+                                onSurveyOne = onSurveySelectedSector,
+                                onSurveyMany = onSurveySelectedSectors,
+                                onBuild = onBuild,
+                                onDevelop = onDevelopExtraction,
+                                onUpgrade = onUpgrade,
+                                onDemolish = onDemolish,
+                                onSetPrimary = onSetPrimaryHeadquarters,
+                                onClearSelection = onClearSelection,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                            )
+                        }
                     }
-
-                    SectorContextBar(
-                        selectedTiles = selectedTiles,
-                        surveyDays = selectedSurveyDays,
-                        surveyableSelectedCount = surveyableSelectedCount,
-                        primaryHeadquarters = colony.headquarters.primary,
-                        powerPreview = powerPreview,
-                        housingPreview = housingPreview,
-                        industryPreview = industryPreview,
-                        headquartersPreview = headquartersPreview,
-                        extractionPreview = extractionPreview,
-                        upgradePreview = upgradePreview,
-                        onSurveyOne = onSurveySelectedSector,
-                        onSurveyMany = onSurveySelectedSectors,
-                        onBuild = onBuild,
-                        onDevelop = onDevelopExtraction,
-                        onUpgrade = onUpgrade,
-                        onDemolish = onDemolish,
-                        onSetPrimary = onSetPrimaryHeadquarters,
-                        onClearSelection = onClearSelection,
-                    )
 
                     FooterControls(
                         speed = simulationSpeed,
                         enabled = colony.status != ColonyStatus.DEAD,
+                        commercialActive = colony.trade.active,
+                        showCommercial = true,
+                        handoverAvailable = handoverAvailable,
                         onSetSpeed = onSetSimulationSpeed,
                         onAdvanceDay = onAdvanceDay,
+                        onOpenCommercial = onOpenCommercial,
+                        onOpenHandover = onOpenHandover,
                         onMainMenu = onMainMenu,
                         modifier = Modifier.height(GameplayFooterHeight),
                     )
@@ -340,7 +345,7 @@ private fun MapToolbar(
 ) {
     Row(
         modifier = modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MapFocus.entries.forEach { option ->
@@ -382,35 +387,68 @@ private fun MapToolbar(
 private fun FooterControls(
     speed: Int,
     enabled: Boolean,
+    commercialActive: Boolean,
+    showCommercial: Boolean,
+    handoverAvailable: Boolean,
     onSetSpeed: (Int) -> Unit,
     onAdvanceDay: () -> Unit,
+    onOpenCommercial: () -> Unit,
+    onOpenHandover: () -> Unit,
     onMainMenu: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-        listOf(0 to "PAUSE", 1 to "1×", 2 to "2×", 4 to "4×").forEach { (value, label) ->
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+        MineItSecondaryButton(
+            text = "PAUSE",
+            onClick = { onSetSpeed(0) },
+            enabled = enabled,
+            selected = speed == 0,
+            modifier = Modifier.weight(1.0f),
+            compact = true,
+        )
+        listOf(1 to "1×", 2 to "2×", 4 to "4×").forEach { (value, label) ->
             MineItSecondaryButton(
                 text = label,
                 onClick = { onSetSpeed(value) },
                 enabled = enabled,
                 selected = speed == value,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(.72f),
                 compact = true,
             )
         }
         MineItSecondaryButton(
-            text = "+1 DAY",
+            text = "+1D",
             onClick = onAdvanceDay,
             enabled = enabled && speed == 0,
-            selected = false,
             accent = MineItPalette.Warning,
-            modifier = Modifier.weight(1.15f),
+            modifier = Modifier.weight(.88f),
             compact = true,
         )
+        if (showCommercial) {
+            MineItSecondaryButton(
+                text = "COMM",
+                onClick = onOpenCommercial,
+                selected = commercialActive,
+                accent = if (commercialActive) MineItPalette.Success else MineItPalette.Accent,
+                modifier = Modifier.weight(.98f),
+                compact = true,
+            )
+        }
+        if (handoverAvailable) {
+            MineItSecondaryButton(
+                text = "HANDOVER",
+                onClick = onOpenHandover,
+                enabled = enabled,
+                selected = true,
+                accent = MineItPalette.Warning,
+                modifier = Modifier.weight(1.28f),
+                compact = true,
+            )
+        }
         MineItSecondaryButton(
             "MENU",
             onMainMenu,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(.9f),
             compact = true,
         )
     }
