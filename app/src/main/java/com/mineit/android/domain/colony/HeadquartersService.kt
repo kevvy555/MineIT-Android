@@ -41,12 +41,29 @@ class HeadquartersService(
         return state.withActiveColony(colony.copy(headquarters = identity))
     }
 
+    /**
+     * Selects a staffed Headquarters as Primary. During the pre-travel migration phase, invoking
+     * the same Primary-HQ action on the already-selected Primary explicitly completes the founding
+     * command handover once the canonical departure gate is satisfied.
+     */
     fun setPrimary(state: GameState, coordinate: SectorCoordinate): HeadquartersActionResult {
         val synced = synchronizePrimary(state)
         val colony = synced.activeColony
         val row = staffing(synced, colony.headquarters.primary).firstOrNull { it.coordinate == coordinate }
         if (row == null || !row.constructed || !row.staffed) {
             return HeadquartersActionResult(false, state, "Primary Headquarters must be fully constructed and staffed.")
+        }
+        if (coordinate == colony.headquarters.primary) {
+            if (colony.headquarters.commandHandoverComplete) {
+                return HeadquartersActionResult(true, synced, "Primary Headquarters already owns colony command.")
+            }
+            val gate = departureGate(synced)
+            if (!gate.ok) return HeadquartersActionResult(false, synced, gate.failures.joinToString(" "))
+            return HeadquartersActionResult(
+                true,
+                completeCommandHandover(synced),
+                "Command handover complete. Primary Headquarters now owns colony command.",
+            )
         }
         val updated = colony.copy(
             headquarters = colony.headquarters.copy(primary = coordinate, primaryEverAssigned = true),
