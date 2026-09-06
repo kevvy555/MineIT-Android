@@ -43,6 +43,36 @@ import com.mineit.android.ui.design.MineItSectionHeader
 import com.mineit.android.ui.design.MineItSpacing
 import com.mineit.android.ui.design.MineItStatusBadge
 
+/** Overload used by the gameplay screen once colony metrics are available. */
+@Composable
+fun HeadquartersControlSheet(
+    state: GameState,
+    metrics: ColonyMetrics,
+    network: ColonyNetworkSnapshot,
+    spaceport: SpaceportStatus,
+    departureGate: HeadquartersDepartureGate,
+    tile: WorldTile,
+    upgradePreview: DevelopmentPreview?,
+    statusMessage: String?,
+    onSetPrimary: () -> Unit,
+    onUpgrade: () -> Unit,
+    onDemolish: () -> Unit,
+    onDismiss: () -> Unit,
+) = HeadquartersColonyControlSheet(
+    state = state,
+    metrics = metrics,
+    network = network,
+    spaceport = spaceport,
+    departureGate = departureGate,
+    tile = tile,
+    upgradePreview = upgradePreview,
+    statusMessage = statusMessage,
+    onSetPrimary = onSetPrimary,
+    onUpgrade = onUpgrade,
+    onDemolish = onDemolish,
+    onDismiss = onDismiss,
+)
+
 /**
  * Consolidated Colony Control surface. Once a Primary Headquarters exists, colony-wide status lives
  * here rather than behind a separate COLONY / DETAILS strip on the map screen.
