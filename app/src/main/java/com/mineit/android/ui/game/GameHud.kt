@@ -23,15 +23,12 @@ import com.mineit.android.domain.colony.ColonyNetworkSnapshot
 import com.mineit.android.domain.colony.EstablishmentPhase
 import com.mineit.android.domain.colony.EstablishmentResourceSplit
 import com.mineit.android.domain.colony.InfrastructureRules
-import com.mineit.android.domain.colony.SpaceportStatus
-import com.mineit.android.domain.model.ColonyStatus
 import com.mineit.android.domain.model.GameState
 import com.mineit.android.domain.resources.ResourceCategory
 import com.mineit.android.domain.simulation.ColonyMetrics
 import com.mineit.android.domain.world.DevelopmentKind
 import com.mineit.android.ui.design.MineItPalette
 import com.mineit.android.ui.design.MineItRadius
-import com.mineit.android.ui.design.MineItSpacing
 import kotlin.math.max
 import kotlin.math.roundToLong
 
@@ -40,19 +37,19 @@ fun GameHeader(
     state: GameState,
     metrics: ColonyMetrics,
     network: ColonyNetworkSnapshot,
-    spaceport: SpaceportStatus,
-    onOpenColonyDetail: () -> Unit,
     modifier: Modifier = Modifier,
     establishment: ColonyEstablishmentAssessment = hudAssessment(state, metrics, network),
-    onOpenEstablishment: (() -> Unit)? = null,
     notificationContent: (@Composable () -> Unit)? = null,
 ) {
     val colony = state.activeColony
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
+    Column(
+        modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = MineItSpacing.Sm),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 1.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Md),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Column(Modifier.weight(1f)) {
                 Text("MINEIT", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
@@ -73,25 +70,6 @@ fun GameHeader(
         notificationContent?.invoke()
         OperationalHud(metrics, network, establishment)
         ResourceHud(metrics, establishment)
-
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-            if (establishment.required && colony.status != ColonyStatus.SITE_SELECTION && onOpenEstablishment != null) {
-                HeaderAction(
-                    label = "HANDOVER",
-                    value = establishment.phase.name,
-                    onClick = onOpenEstablishment,
-                    color = if (establishment.acknowledged) MineItPalette.Warning else MineItPalette.Accent,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            HeaderAction(
-                label = "COLONY",
-                value = if (spaceport.operational) "ONLINE" else "DETAILS",
-                onClick = onOpenColonyDetail,
-                color = if (spaceport.operational) MineItPalette.Success else MineItPalette.Warning,
-                modifier = Modifier.weight(1f),
-            )
-        }
     }
 }
 
@@ -103,28 +81,28 @@ private fun OperationalHud(
 ) {
     val planetaryIndustry = max(0.0, metrics.industry - network.shipIndustry)
     val freeWorkforce = max(0.0, network.workforceAvailable - network.workforceRequired)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-        SplitCard(
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        CompactSplitCard(
             label = "HOUSING",
             ship = "${format(establishment.shipResidents)}/${format(establishment.shipAccommodationCapacity.toDouble())}",
             colony = "${format(establishment.planetaryAccommodationResidents)}/${format(establishment.housingCapacity)}",
             modifier = Modifier.weight(1f),
         )
-        SplitCard(
+        CompactSplitCard(
             label = "POWER",
             ship = if (establishment.foundingShipId != null) "SELF" else "—",
             colony = "${format(network.fuelLimitedGeneration)}/${format(network.powerDemand)}",
             colonyColor = if (metrics.powerFactor >= .999) MineItPalette.Success else MineItPalette.Critical,
             modifier = Modifier.weight(1f),
         )
-        SplitCard(
+        CompactSplitCard(
             label = "INDUSTRY",
             ship = "+${format(network.shipIndustry)}",
             colony = "${format(planetaryIndustry)}/${format(network.builtIndustry)}",
             colonyColor = if (network.industryPowerFactor >= .999) MineItPalette.Success else MineItPalette.Warning,
             modifier = Modifier.weight(1f),
         )
-        SplitCard(
+        CompactSplitCard(
             label = "WORKFORCE",
             ship = "${establishment.shipCrew}/${establishment.shipMinimumCrew} MIN",
             colony = "${format(freeWorkforce)} FREE",
@@ -136,56 +114,127 @@ private fun OperationalHud(
 
 @Composable
 private fun ResourceHud(metrics: ColonyMetrics, establishment: ColonyEstablishmentAssessment) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Xs)) {
-        ResourceSplitCard("FOOD", ResourceCategory.FOOD, establishment, supplyLabel(metrics.foodDays, metrics.foodProduction, metrics.foodDemand), establishment.shipFoodDaysRemaining?.let(::daysLabel) ?: "stable", MineItPalette.Food, Modifier.weight(1f))
-        ResourceSplitCard("BUILD", ResourceCategory.BUILD, establishment, "+${format(metrics.buildProduction)}/d", "aboard", MineItPalette.Build, Modifier.weight(1f))
-        ResourceSplitCard("FUEL", ResourceCategory.FUEL, establishment, supplyLabel(metrics.fuelDays, metrics.fuelProduction, metrics.fuelDemand), "aboard", MineItPalette.Fuel, Modifier.weight(1f))
-        ResourceSplitCard("ORE", ResourceCategory.ORE, establishment, supplyLabel(metrics.oreDays, metrics.oreProduction, metrics.oreDemand), "aboard", MineItPalette.Ore, Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        CompactResourceCard(
+            label = "FOOD",
+            category = ResourceCategory.FOOD,
+            establishment = establishment,
+            colonyDetail = supplyLabel(metrics.foodDays, metrics.foodProduction, metrics.foodDemand),
+            shipDetail = establishment.shipFoodDaysRemaining?.let(::daysLabel),
+            accent = MineItPalette.Food,
+            modifier = Modifier.weight(1f),
+        )
+        CompactResourceCard(
+            label = "BUILD",
+            category = ResourceCategory.BUILD,
+            establishment = establishment,
+            colonyDetail = "+${format(metrics.buildProduction)}/d",
+            shipDetail = null,
+            accent = MineItPalette.Build,
+            modifier = Modifier.weight(1f),
+        )
+        CompactResourceCard(
+            label = "FUEL",
+            category = ResourceCategory.FUEL,
+            establishment = establishment,
+            colonyDetail = supplyLabel(metrics.fuelDays, metrics.fuelProduction, metrics.fuelDemand),
+            shipDetail = null,
+            accent = MineItPalette.Fuel,
+            modifier = Modifier.weight(1f),
+        )
+        CompactResourceCard(
+            label = "ORE",
+            category = ResourceCategory.ORE,
+            establishment = establishment,
+            colonyDetail = supplyLabel(metrics.oreDays, metrics.oreProduction, metrics.oreDemand),
+            shipDetail = null,
+            accent = MineItPalette.Ore,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
 @Composable
-private fun SplitCard(label: String, ship: String, colony: String, modifier: Modifier = Modifier, shipColor: Color = MineItPalette.Text, colonyColor: Color = MineItPalette.Text) {
-    Surface(color = MineItPalette.Control, shape = RoundedCornerShape(MineItRadius.Small), border = BorderStroke(1.dp, MineItPalette.Line), modifier = modifier) {
-        Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+private fun CompactSplitCard(
+    label: String,
+    ship: String,
+    colony: String,
+    modifier: Modifier = Modifier,
+    shipColor: Color = MineItPalette.Text,
+    colonyColor: Color = MineItPalette.Text,
+) {
+    Surface(
+        color = MineItPalette.Control,
+        shape = RoundedCornerShape(MineItRadius.Small),
+        border = BorderStroke(1.dp, MineItPalette.Line),
+        modifier = modifier,
+    ) {
+        Column(
+            Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted, maxLines = 1)
-            SplitRow("S", ship, shipColor)
-            SplitRow("C", colony, colonyColor)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                CompactValue("S", ship, shipColor, Modifier.weight(1f))
+                CompactValue("C", colony, colonyColor, Modifier.weight(1f))
+            }
         }
     }
 }
 
 @Composable
-private fun ResourceSplitCard(label: String, category: ResourceCategory, establishment: ColonyEstablishmentAssessment, colonyDetail: String, shipDetail: String, accent: Color, modifier: Modifier = Modifier) {
+private fun CompactResourceCard(
+    label: String,
+    category: ResourceCategory,
+    establishment: ColonyEstablishmentAssessment,
+    colonyDetail: String,
+    shipDetail: String?,
+    accent: Color,
+    modifier: Modifier = Modifier,
+) {
     val split = establishment.resourceSplit.getValue(category)
-    Surface(color = accent.copy(alpha = .10f), shape = RoundedCornerShape(MineItRadius.Small), border = BorderStroke(1.dp, accent.copy(alpha = .28f)), modifier = modifier) {
-        Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+    Surface(
+        color = accent.copy(alpha = .10f),
+        shape = RoundedCornerShape(MineItRadius.Small),
+        border = BorderStroke(1.dp, accent.copy(alpha = .28f)),
+        modifier = modifier,
+    ) {
+        Column(
+            Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = accent, maxLines = 1)
-            SplitRow("S", format(split.ship), MineItPalette.Text, shipDetail)
-            SplitRow("C", format(split.colony), MineItPalette.Text, colonyDetail)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                CompactValue(
+                    prefix = "S",
+                    value = buildString {
+                        append(format(split.ship))
+                        shipDetail?.let { append(" · ").append(it) }
+                    },
+                    color = MineItPalette.Text,
+                    modifier = Modifier.weight(1f),
+                )
+                CompactValue(
+                    prefix = "C",
+                    value = "${format(split.colony)} · $colonyDetail",
+                    color = MineItPalette.Text,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SplitRow(prefix: String, value: String, color: Color, detail: String? = null) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Text(prefix, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
-        Column(horizontalAlignment = Alignment.End) {
-            Text(value, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
-            detail?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted, maxLines = 1) }
-        }
-    }
-}
-
-@Composable
-private fun HeaderAction(label: String, value: String, onClick: () -> Unit, color: Color, modifier: Modifier = Modifier) {
-    Surface(onClick = onClick, color = MineItPalette.Control, shape = RoundedCornerShape(MineItRadius.Small), border = BorderStroke(1.dp, MineItPalette.Line), modifier = modifier) {
-        Row(Modifier.padding(horizontal = 7.dp, vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MineItPalette.Muted)
-            Text(value, style = MaterialTheme.typography.labelMedium, color = color)
-        }
-    }
+private fun CompactValue(prefix: String, value: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        text = "$prefix $value",
+        modifier = modifier,
+        style = MaterialTheme.typography.labelSmall,
+        color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 private fun hudAssessment(state: GameState, metrics: ColonyMetrics, network: ColonyNetworkSnapshot): ColonyEstablishmentAssessment {
