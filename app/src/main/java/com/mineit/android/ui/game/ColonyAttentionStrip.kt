@@ -1,8 +1,8 @@
 package com.mineit.android.ui.game
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,7 +21,6 @@ import com.mineit.android.app.ColonyAttention
 import com.mineit.android.app.ColonyAttentionSeverity
 import com.mineit.android.ui.design.MineItPalette
 import com.mineit.android.ui.design.MineItRadius
-import com.mineit.android.ui.design.MineItSpacing
 
 @Composable
 fun ColonyAttentionStrip(
@@ -31,35 +30,28 @@ fun ColonyAttentionStrip(
 ) {
     val accent = attentionColor(attention.severity)
     Surface(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         color = accent.copy(alpha = .12f),
         shape = RoundedCornerShape(MineItRadius.Small),
         border = BorderStroke(1.dp, accent.copy(alpha = .42f)),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = MineItSpacing.Sm, vertical = 5.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(MineItSpacing.Sm),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("◆", color = accent, style = MaterialTheme.typography.labelLarge)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    attention.title,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MineItPalette.Text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    attention.detail,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MineItPalette.Muted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
+            Text("◆", color = accent, style = MaterialTheme.typography.labelSmall)
+            Text(
+                text = "${attention.title} • ${attention.detail}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MineItPalette.Text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 attention.actionLabel,
                 style = MaterialTheme.typography.labelSmall,
