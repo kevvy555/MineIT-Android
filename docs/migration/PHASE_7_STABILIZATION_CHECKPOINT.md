@@ -1,135 +1,134 @@
 # Phase 7 — Manual Stabilization Checkpoint
 
-**Status:** Implementation/regression complete; second physical-device validation pending  
+**Status:** Follow-up implementation/regression complete; physical-device revalidation pending  
 **Date:** 6 September 2026  
 **Branch:** `feature/migration-phase-7`  
-**Previous device build:** `0.7.7-migration` / version code `19`  
-**Stabilization validation build:** `0.7.8-migration` / version code `20`  
-**Native save format:** `7` (unchanged)  
-**Code CI before build bump:** Android CI run `34038242584` / run `343` — success
+**Previous device build:** `0.7.8-migration` / version code `20`  
+**Follow-up validation build:** `0.7.9-migration` / version code `21`  
+**Native save format:** `7` (unchanged)
 
 ## Why this checkpoint exists
 
-The first Phase 7.1–7.5 physical-device playthrough reached a real continuous-game blocker rather than merely visual polish. The run progressed through normal colony development until the Corporate Ship/Fuel/Power recovery path became unusable.
+The first Phase 7.1–7.5 physical-device playthrough exposed integration blockers that unit-level parity work had not revealed. A first stabilization build fixed the map viewport and exposed pre-travel command handover, but the device review then clarified the intended Corporate Ship purchase rule and exposed an HQ-build crash.
 
-Manual findings from `0.7.7-migration`:
-
-1. a docked Corporate Ship could be visible while every Buy action was unavailable once the Spaceport had lost Power;
-2. this could create a Fuel → Power → Spaceport → Fuel deadlock and lead to otherwise avoidable colony death;
-3. a fully staffed Primary Headquarters could show command handover as READY but there was no native action capable of completing it because source completion normally happens inside the later, still-deferred launch workflow;
-4. the colony map visibly changed size whenever the variable-height selected-sector context bar opened/changed;
-5. full Conglomerate Buyers-service discoverability is still intentionally Phase 7.6 and was not pulled into this stabilization pass.
-
-The `0.7.7` device checkpoint is therefore **not accepted**. These blockers were addressed before adding more migration surface area.
+The `0.7.7` and `0.7.8` device checkpoints are therefore **not accepted**. This `0.7.9` checkpoint supersedes the temporary Fuel-only recovery rule and is the next manual validation target.
 
 ## Stabilization changes
 
-### 1. Corporate Ship emergency Fuel recovery
+### 1. Corporate Ship purchases use a working computer link
 
-Normal maintained-web Spaceport gating remains intact for routine operation:
+Corporate purchases are no longer a powered-Spaceport operation.
 
-- selling still requires a powered Spaceport;
-- Food, Build and Ore imports still require a powered Spaceport;
-- colonist transfer still requires powered transfer services;
-- normal ship loading/transfer behavior is unchanged.
+While a Corporate Ship is docked, the colony can buy **Food, Build, Fuel or Ore** when either:
 
-A focused recovery exception is now provided while a Corporate Ship is already docked:
+- any player ship is docked at the active colony; or
+- a Headquarters is constructed, fully staffed and powered.
 
-- Fuel purchases remain available even if the Spaceport is currently offline;
-- the purchase still uses the normal corporate price;
-- the purchase still consumes company cash;
-- the purchase still consumes the visit's import cargo capacity;
-- the UI explicitly labels the state `SPACEPORT OFFLINE • EMERGENCY FUEL ONLY`;
-- Fuel rows identify the purchase as an emergency transfer;
-- non-Fuel rows remain disabled until Spaceport Power is restored.
+The visiting Corporate Ship unloads purchased supplies itself. Therefore Spaceport Power is not required for buying.
 
-This deliberate semantic difference from the current web source is recorded in `INTENTIONAL_DIVERGENCES.md`.
+All normal purchase economics remain authoritative:
 
-Regression coverage:
+- normal Corporate Ship buy price;
+- company cash;
+- visit import-cargo capacity;
+- resource stock goes into the colony inventory.
 
-- `CorporateTradeServiceTest.buyKeepsNormalSpaceportGateButAllowsEmergencyFuelRecovery`;
-- `CorporateTradePresentationTest.offline Spaceport leaves only Fuel buying available for recovery`.
+Separate Spaceport-owned operations remain gated by powered Spaceport services:
 
-### 2. Stable colony-map viewport
+- selling/loading colony stock;
+- colonist/passenger transfer;
+- engineering and later market/departure services.
 
-`SectorContextBar` now occupies one constant-height slot beneath the map regardless of whether it is:
+The Corporate Ship UI now distinguishes:
 
-- empty;
-- showing one sector;
-- showing several survey sectors;
-- showing a developed sector with actions/requirements.
+- `CORPORATE PURCHASE LINK OFFLINE` when neither computer source exists;
+- `SPACEPORT OFFLINE • PURCHASE LINK ONLINE` when the computer link works but Spaceport services do not;
+- `CORPORATE UNLOAD` on purchases made while the Spaceport is offline.
 
-Richer context content scrolls inside that slot when necessary. It no longer changes the amount of vertical space assigned to the `ColonyMap`, so tapping/clearing/changing sectors must not make the map jump in size.
-
-The obsolete `hold then drag` instruction was also corrected to the current normal-drag surveying interaction.
-
-### 3. Explicit founding command handover
-
-The authoritative `HeadquartersService.completeCommandHandover` state transition already existed, but the source normally triggers it from the first successful ship launch. Full native launch/travel remains deliberately deferred.
-
-During Phase 7 stabilization:
-
-- a selected Primary Headquarters whose canonical departure gate is satisfied shows `COMPLETE COMMAND HANDOVER`;
-- the same gate remains: Primary HQ fully constructed and fully staffed; Headquarters Power is not a handover requirement;
-- activating the command persists the existing `commandHandoverComplete` field;
-- the HQ changes from HANDOVER READY to COMPLETE;
-- the action does not launch or move the founding ship;
-- route planning/interstellar travel remain later work.
-
-This temporary/pre-travel semantic difference is recorded in `INTENTIONAL_DIVERGENCES.md`.
+This deliberate semantic correction is recorded in `INTENTIONAL_DIVERGENCES.md`. It supersedes the short-lived `emergency Fuel only` rule from the first stabilization pass.
 
 Regression coverage:
 
-- existing Phase 4 Headquarters gate/handover regression;
-- `Phase7StabilizationTest.primary Headquarters action completes founding handover before travel migration`.
+- `CorporatePurchaseAccessTest` — docked player ship, powered/staffed HQ, and no-link states;
+- `CorporateTradeServiceTest.buyUsesComputerLinkRatherThanSpaceportPower`;
+- `CorporateTradePresentationTest.buy buttons follow corporate computer-link availability for every import category`.
 
-## CI evidence
+### 2. Headquarters build crash
 
-Android CI run `34038242584` / run `343` passed the complete stabilization code/regression head before the validation build bump:
+The physical-device report was consistent with a state/derived-state race:
 
-- Kotlin/JUnit regression suite;
-- debug APK assembly;
-- persistent development signer verification;
-- APK artifact upload.
+1. building an HQ commits the new authoritative `GameState`;
+2. the session state flow can recompose the selected tile immediately;
+3. the derived `ColonyNetworkSnapshot` is recalculated just afterward;
+4. for one composition frame, the selected tile can therefore be an HQ while the previous network snapshot has no matching HQ row;
+5. the HQ presentation previously required that row with `requireNotNull`, causing the app to terminate;
+6. after reload the network is already rebuilt, which explains why the same HQ then appeared correctly.
 
-A fresh exact-head CI run for the `0.7.8-migration` build/docs checkpoint must pass before its artifact is supplied for device testing.
+`HeadquartersControlReadiness` now guards the HQ sheet until the matching derived network row exists. Gameplay state is not delayed or duplicated; only presentation waits for the derived snapshot it requires.
 
-## Second physical-device validation
+Regression coverage:
 
-Install `0.7.8-migration` and concentrate first on the previously blocked continuous path.
+- `HeadquartersControlReadinessTest.new Headquarters waits for matching derived network row before sheet renders`.
+
+### 3. Stable colony-map viewport
+
+The first stabilization pass remains in force:
+
+- `SectorContextBar` occupies a constant-height slot;
+- richer selected-sector content scrolls inside that slot;
+- selecting/clearing/changing sectors must not resize the map;
+- current surveying instruction reflects normal drag selection rather than obsolete hold-then-drag wording.
+
+### 4. Explicit founding command handover
+
+The first stabilization pass also remains in force:
+
+- a fully constructed and staffed Primary Headquarters exposes `COMPLETE COMMAND HANDOVER`;
+- Headquarters Power is not part of the canonical handover gate;
+- completion persists `commandHandoverComplete` without launching/moving the founding ship;
+- full route planning/interstellar travel remains deferred.
+
+## Manual validation for 0.7.9
+
+### Headquarters crash and handover
+
+1. Build the first Headquarters while its sector remains selected.
+2. Confirm the app does **not** crash immediately after construction.
+3. Open/close the HQ several times and confirm its detail/network panel renders normally.
+4. Save/reload and confirm the HQ remains usable.
+5. If practical, build/upgrade another HQ and confirm no equivalent crash.
+6. Before Primary-HQ staffing is satisfied, confirm command handover is blocked.
+7. Once the Primary HQ is fully staffed, activate `COMPLETE COMMAND HANDOVER`.
+8. Confirm handover becomes COMPLETE and remains complete after save/reload.
+
+### Corporate Ship purchases
+
+9. With the founding/player ship still docked, allow the Corporate Ship to arrive.
+10. Confirm Buy works for Fuel, Food, Ore and Build even if the Spaceport is unpowered.
+11. Confirm purchases deduct cash and visit import capacity and add the selected resource to colony stock.
+12. Confirm the offline-Spaceport UI explains that the Corporate Ship is unloading the purchase itself.
+13. Confirm selling and colonist transfer remain unavailable while Spaceport services are offline.
+14. Restore Spaceport Power and confirm those normal Spaceport operations return.
+15. If practical, test a state with no docked player ship but a powered/staffed HQ and confirm all Corporate Ship purchase categories remain available.
+16. If practical, test with neither a docked player ship nor powered/staffed HQ and confirm Buy reports the purchase link offline.
 
 ### Map
 
-1. Start/continue a colony and note the map's physical dimensions with no sector selected.
-2. Tap an empty surveyed sector, a resource sector and a developed sector.
-3. Open/close different sector contexts repeatedly.
-4. Confirm the map remains exactly the same size throughout.
-5. Confirm any unusually rich sector context can scroll within its own fixed slot rather than resizing the map.
+17. Note the map dimensions with no sector selected.
+18. Tap empty, resource and developed sectors repeatedly.
+19. Confirm the map remains exactly the same size while the bottom context changes.
+20. Confirm rich context content scrolls within its fixed area instead of resizing the map.
 
-### Headquarters handover
+### Continuous survival path
 
-6. Build/identify the Primary Headquarters.
-7. Before its staffing gate is satisfied, confirm handover reports BLOCKED.
-8. Once fully constructed/staffed, open the Primary HQ and confirm `COMPLETE COMMAND HANDOVER` appears.
-9. Activate it and confirm the handover becomes COMPLETE without launching/moving the founding ship.
-10. Close/reopen HQ and save/reload; confirm COMPLETE persists.
-11. Confirm normal Headquarters/network information remains usable after handover.
-
-### Corporate Ship and Fuel recovery
-
-12. During a powered visit, confirm ordinary Buy/Sell/Colonists behavior still works.
-13. Reproduce or approach a Fuel shortage until the Spaceport becomes unpowered while the Corporate Ship is docked.
-14. Confirm the Corporate Ship clearly reports `SPACEPORT OFFLINE • EMERGENCY FUEL ONLY`.
-15. Open Buy → Fuel and confirm Fuel rows remain purchasable.
-16. Confirm Food, Build and Ore remain disabled while Spaceport services are offline.
-17. Buy enough Fuel to restore generation and confirm company cash/import cargo/Fuel stock update correctly.
-18. Advance/recalculate until Spaceport Power returns and confirm normal Corporate Ship services become available again.
-19. Confirm the colony can recover instead of being forced into the previous Power/Fuel death spiral.
-20. Save/reload around the recovery path if practical.
+21. Re-run the low-Fuel path that previously killed the colony.
+22. Confirm a docked player ship or operational HQ lets you buy Fuel from the Corporate Ship without Spaceport Power.
+23. Buy sufficient Fuel, advance/recalculate, and confirm the colony can recover Power.
+24. Continue beyond the point where the `0.7.7` run became blocked.
 
 ## Not yet expected in this build
 
-Do not treat these as failures of the stabilization checkpoint:
+Do not treat these as failures of this checkpoint:
 
 - full Conglomerate Buyers Service/profile/directory parity — Phase 7.6;
 - full Technology/Engineering progression — Phase 7.7;
@@ -137,4 +136,4 @@ Do not treat these as failures of the stabilization checkpoint:
 - full Spaceport service panel — Phase 7.9;
 - general ship launch, Star Map navigation and interstellar travel — later fleet/travel phase.
 
-If this second manual pass clears the three blockers, continue into Phase 7.6–7.9 as the next migration round.
+If this manual pass clears the blockers, continue into Phase 7.6–7.9 as the next migration round.
