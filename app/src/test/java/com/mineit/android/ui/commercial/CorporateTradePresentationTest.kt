@@ -52,6 +52,15 @@ class CorporateTradePresentationTest {
     }
 
     @Test
+    fun `offline Spaceport leaves only Fuel buying available for recovery`() {
+        assertTrue(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.FUEL, normalSpaceportServicesAvailable = false))
+        assertFalse(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.FOOD, normalSpaceportServicesAvailable = false))
+        assertFalse(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.BUILD, normalSpaceportServicesAvailable = false))
+        assertFalse(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.ORE, normalSpaceportServicesAvailable = false))
+        assertTrue(CorporateTradePresentation.buyServiceAvailable(ResourceCategory.ORE, normalSpaceportServicesAvailable = true))
+    }
+
+    @Test
     fun `colonists default to safe maximum and become unavailable when contract has ended`() {
         val projection = ColonistTransferProjection(
             supportedPopulationCapacity = 500,
