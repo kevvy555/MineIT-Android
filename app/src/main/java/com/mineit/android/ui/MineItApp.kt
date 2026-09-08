@@ -3,6 +3,7 @@ package com.mineit.android.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -202,58 +203,67 @@ fun MineItApp(viewModel: GameViewModel = viewModel()) {
                 }
 
                 commercialPanel?.let { panel ->
-                    when (panel) {
-                        CommercialPanel.TRADE -> TradeCommercialPanelScreen(
-                            state = state,
-                            spaceport = spaceport,
-                            daysUntilArrival = viewModel.tradeDaysUntilArrival(),
-                            cargoCapacity = viewModel.tradeCargoCapacity(),
-                            cargoRemaining = viewModel.tradeCargoRemaining(),
-                            exportCapacity = viewModel.tradeExportCapacity(),
-                            exportRemaining = viewModel.tradeExportRemaining(),
-                            passengerRemaining = viewModel.tradePassengerRemaining(),
-                            colonistProjection = viewModel.tradeColonistProjection(),
-                            sellableAmount = viewModel::tradeSellableAmount,
-                            sellQuote = viewModel::tradeSellQuote,
-                            buyPrice = viewModel::tradeBuyPrice,
-                            onSelectPanel = viewModel::openCommercialPanel,
-                            onClose = viewModel::closeCommercialPanel,
-                            onSetReserve = viewModel::setTradeReserve,
-                            onSellResource = viewModel::sellResource,
-                            onSellCategory = viewModel::sellTradeCategory,
-                            onSellAll = viewModel::sellAllTrade,
-                            onBuyResource = viewModel::buyResource,
-                            onTransferColonists = viewModel::transferColonists,
-                            onDepartCorporateShip = viewModel::departCorporateShip,
-                        )
-
-                        CommercialPanel.CONTRACT -> ContractCommercialPanelScreen(
-                            state = state,
-                            metrics = metrics,
-                            score = viewModel.contractScore(),
-                            onSelectPanel = viewModel::openCommercialPanel,
-                            onClose = viewModel::closeCommercialPanel,
-                            onRenewContract = viewModel::renewContract,
-                            onEndLiability = viewModel::endContractAsLiability,
-                        )
-
-                        CommercialPanel.BUYERS, CommercialPanel.LOG -> {
-                            val contracts = viewModel.buyerContracts()
-                            CommercialPanelScreen(
-                                panel = panel,
+                    // Full-screen commercial surfaces bypass MineItScreen's Scaffold, so they must
+                    // consume safe drawing insets here. This keeps CLOSE and departure controls out
+                    // from under status-bar/cutout/navigation UI on edge-to-edge Android devices.
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .safeDrawingPadding(),
+                    ) {
+                        when (panel) {
+                            CommercialPanel.TRADE -> TradeCommercialPanelScreen(
                                 state = state,
-                                network = network,
-                                buyerOffers = if (panel == CommercialPanel.BUYERS) state.company.buyers.offers.take(25) else emptyList(),
-                                buyerContracts = contracts,
-                                buyerProjections = contracts.mapNotNull { contract -> viewModel.buyerProjection(contract.id)?.let { contract.id to it } }.toMap(),
+                                spaceport = spaceport,
+                                daysUntilArrival = viewModel.tradeDaysUntilArrival(),
+                                cargoCapacity = viewModel.tradeCargoCapacity(),
+                                cargoRemaining = viewModel.tradeCargoRemaining(),
+                                exportCapacity = viewModel.tradeExportCapacity(),
+                                exportRemaining = viewModel.tradeExportRemaining(),
+                                passengerRemaining = viewModel.tradePassengerRemaining(),
+                                colonistProjection = viewModel.tradeColonistProjection(),
+                                sellableAmount = viewModel::tradeSellableAmount,
+                                sellQuote = viewModel::tradeSellQuote,
+                                buyPrice = viewModel::tradeBuyPrice,
                                 onSelectPanel = viewModel::openCommercialPanel,
                                 onClose = viewModel::closeCommercialPanel,
-                                onAcceptBuyerOffer = viewModel::acceptBuyerOffer,
-                                onTransferBuyer = viewModel::transferBuyerShipment,
-                                onWaitBuyer = viewModel::continueBuyerWaiting,
-                                onMissBuyer = viewModel::resolveBuyerMiss,
-                                onCancelBuyer = viewModel::cancelBuyerContract,
+                                onSetReserve = viewModel::setTradeReserve,
+                                onSellResource = viewModel::sellResource,
+                                onSellCategory = viewModel::sellTradeCategory,
+                                onSellAll = viewModel::sellAllTrade,
+                                onBuyResource = viewModel::buyResource,
+                                onTransferColonists = viewModel::transferColonists,
+                                onDepartCorporateShip = viewModel::departCorporateShip,
                             )
+
+                            CommercialPanel.CONTRACT -> ContractCommercialPanelScreen(
+                                state = state,
+                                metrics = metrics,
+                                score = viewModel.contractScore(),
+                                onSelectPanel = viewModel::openCommercialPanel,
+                                onClose = viewModel::closeCommercialPanel,
+                                onRenewContract = viewModel::renewContract,
+                                onEndLiability = viewModel::endContractAsLiability,
+                            )
+
+                            CommercialPanel.BUYERS, CommercialPanel.LOG -> {
+                                val contracts = viewModel.buyerContracts()
+                                CommercialPanelScreen(
+                                    panel = panel,
+                                    state = state,
+                                    network = network,
+                                    buyerOffers = if (panel == CommercialPanel.BUYERS) state.company.buyers.offers.take(25) else emptyList(),
+                                    buyerContracts = contracts,
+                                    buyerProjections = contracts.mapNotNull { contract -> viewModel.buyerProjection(contract.id)?.let { contract.id to it } }.toMap(),
+                                    onSelectPanel = viewModel::openCommercialPanel,
+                                    onClose = viewModel::closeCommercialPanel,
+                                    onAcceptBuyerOffer = viewModel::acceptBuyerOffer,
+                                    onTransferBuyer = viewModel::transferBuyerShipment,
+                                    onWaitBuyer = viewModel::continueBuyerWaiting,
+                                    onMissBuyer = viewModel::resolveBuyerMiss,
+                                    onCancelBuyer = viewModel::cancelBuyerContract,
+                                )
+                            }
                         }
                     }
                 }
